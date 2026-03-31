@@ -22,7 +22,13 @@ const assignmentSchema = new Schema(
   { timestamps: true }
 );
 
-assignmentSchema.index({ userId: 1, externalId: 1 }, { unique: true, sparse: true });
+assignmentSchema.index(
+  { userId: 1, externalId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { externalId: { $type: "string" } }
+  }
+);
 
 export const AssignmentModel =
   models.Assignment || model("Assignment", assignmentSchema);

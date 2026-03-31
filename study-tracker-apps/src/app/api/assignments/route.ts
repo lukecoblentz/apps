@@ -61,7 +61,8 @@ export async function POST(req: NextRequest) {
       ...parsed.data,
       dueAt: new Date(parsed.data.dueAt),
       userId,
-      source: "manual"
+      source: "manual",
+      externalId: `manual:${userId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
     });
 
     return NextResponse.json(created, { status: 201 });
