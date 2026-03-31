@@ -67,8 +67,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     console.error("POST /api/assignments failed", error);
+    const detail = error instanceof Error ? error.message : "Unknown server error";
     return NextResponse.json(
-      { error: "Server failed to add assignment. Please refresh and retry." },
+      {
+        error: `Server failed to add assignment. ${detail}`
+      },
       { status: 500 }
     );
   }
