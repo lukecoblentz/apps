@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
-import { pushAssignmentToGoogle } from "@/lib/google-sync";
+import { pushAssignmentToMicrosoft } from "@/lib/microsoft-sync";
 import { getCurrentUserId } from "@/lib/require-user";
 
 const schema = z.object({
@@ -22,16 +22,16 @@ export async function POST(req: NextRequest) {
 
   await connectToDatabase();
   try {
-    const { eventId } = await pushAssignmentToGoogle(
+    const { eventId } = await pushAssignmentToMicrosoft(
       userId,
       parsed.data.assignmentId,
       req.nextUrl.origin
     );
-    return NextResponse.json({ ok: true, googleEventId: eventId });
+    return NextResponse.json({ ok: true, msEventId: eventId });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown Google error";
+    const detail = error instanceof Error ? error.message : "Unknown Microsoft error";
     return NextResponse.json(
-      { error: `Google push failed: ${detail}` },
+      { error: `Microsoft push failed: ${detail}` },
       { status: 502 }
     );
   }

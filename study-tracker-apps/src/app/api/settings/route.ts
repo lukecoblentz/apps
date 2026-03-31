@@ -13,7 +13,11 @@ const patchSchema = z
     canvasBaseUrl: z.string().max(500).optional(),
     canvasAccessToken: z.string().max(20000).optional(),
     googleAccessToken: z.string().max(20000).optional(),
-    googleCalendarId: z.string().max(400).optional()
+    googleCalendarId: z.string().max(400).optional(),
+    googleAutoSync: z.boolean().optional(),
+    googleDisconnect: z.boolean().optional(),
+    msAutoSync: z.boolean().optional(),
+    msDisconnect: z.boolean().optional()
   })
   .strict();
 
@@ -34,7 +38,12 @@ export async function GET() {
     canvasBaseUrl?: string;
     canvasAccessToken?: string;
     googleAccessToken?: string;
+    googleRefreshToken?: string;
     googleCalendarId?: string;
+    googleAutoSync?: boolean;
+    msAccessToken?: string;
+    msRefreshToken?: string;
+    msAutoSync?: boolean;
   };
   const reminders = user.reminderMinutesBefore;
   return NextResponse.json({
@@ -42,8 +51,11 @@ export async function GET() {
       reminders && reminders.length > 0 ? reminders : [1440, 120],
     canvasBaseUrl: user.canvasBaseUrl || "",
     hasCanvasToken: Boolean(user.canvasAccessToken),
-    hasGoogleToken: Boolean(user.googleAccessToken),
-    googleCalendarId: user.googleCalendarId || "primary"
+    hasGoogleToken: Boolean(user.googleAccessToken || user.googleRefreshToken),
+    googleCalendarId: user.googleCalendarId || "primary",
+    googleAutoSync: Boolean(user.googleAutoSync),
+    hasMicrosoftToken: Boolean(user.msAccessToken || user.msRefreshToken),
+    msAutoSync: Boolean(user.msAutoSync)
   });
 }
 
@@ -92,12 +104,30 @@ export async function PATCH(req: NextRequest) {
   if (parsed.data.googleAccessToken !== undefined) {
     if (parsed.data.googleAccessToken === "") {
       $set.googleAccessToken = "";
+      $set.googleRefreshToken = "";
+      $set.googleTokenExpiresAt = null;
     } else {
       $set.googleAccessToken = parsed.data.googleAccessToken;
     }
   }
+  if (parsed.data.googleDisconnect) {
+    $set.googleAccessToken = "";
+    $set.googleRefreshToken = "";
+    $set.googleTokenExpiresAt = null;
+  }
   if (parsed.data.googleCalendarId !== undefined) {
     $set.googleCalendarId = parsed.data.googleCalendarId || "primary";
+  }
+  if (parsed.data.googleAutoSync !== undefined) {
+    $set.googleAutoSync = parsed.data.googleAutoSync;
+  }
+  if (parsed.data.msAutoSync !== undefined) {
+    $set.msAutoSync = parsed.data.msAutoSync;
+  }
+  if (parsed.data.msDisconnect) {
+    $set.msAccessToken = "";
+    $set.msRefreshToken = "";
+    $set.msTokenExpiresAt = null;
   }
 
   if (Object.keys($set).length === 0) {

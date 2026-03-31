@@ -4,6 +4,11 @@ import { AssignmentModel } from "@/models/Assignment";
 import { ClassModel } from "@/models/Class";
 import { assignmentSchema } from "@/lib/validators/assignment";
 import { getCurrentUserId } from "@/lib/require-user";
+import { isGoogleAutoSyncEnabled, pushAssignmentToGoogle } from "@/lib/google-sync";
+import {
+  isMicrosoftAutoSyncEnabled,
+  pushAssignmentToMicrosoft
+} from "@/lib/microsoft-sync";
 
 export async function GET() {
   try {
@@ -64,6 +69,23 @@ export async function POST(req: NextRequest) {
       source: "manual",
       externalId: `manual:${userId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
     });
+
+    try {
+      const autoSyncEnabled = await isGoogleAutoSyncEnabled(userId);
+      if (autoSyncEnabled) {
+        await pushAssignmentToGoogle(userId, String(created._id), req.nextUrl.origin);
+      }
+    } catch (error) {
+      console.error("POST /api/assignments auto Google sync skipped", error);
+    }
+    try {
+      const autoSyncEnabled = await isMicrosoftAutoSyncEnabled(userId);
+      if (autoSyncEnabled) {
+        await pushAssignmentToMicrosoft(userId, String(created._id), req.nextUrl.origin);
+      }
+    } catch (error) {
+      console.error("POST /api/assignments auto Microsoft sync skipped", error);
+    }
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

@@ -3,6 +3,11 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { AssignmentModel } from "@/models/Assignment";
 import { getCurrentUserId } from "@/lib/require-user";
 import { assignmentPatchSchema } from "@/lib/validators/assignment-patch";
+import { isGoogleAutoSyncEnabled, pushAssignmentToGoogle } from "@/lib/google-sync";
+import {
+  isMicrosoftAutoSyncEnabled,
+  pushAssignmentToMicrosoft
+} from "@/lib/microsoft-sync";
 
 export async function PATCH(
   req: NextRequest,
@@ -41,6 +46,30 @@ export async function PATCH(
 
   if (!updated) {
     return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+  }
+
+  if (
+    parsed.data.title !== undefined ||
+    parsed.data.description !== undefined ||
+    parsed.data.classId !== undefined ||
+    parsed.data.dueAt !== undefined
+  ) {
+    try {
+      const autoSyncEnabled = await isGoogleAutoSyncEnabled(userId);
+      if (autoSyncEnabled) {
+        await pushAssignmentToGoogle(userId, params.id, req.nextUrl.origin);
+      }
+    } catch (error) {
+      console.error("PATCH /api/assignments/[id] auto Google sync skipped", error);
+    }
+    try {
+      const autoSyncEnabled = await isMicrosoftAutoSyncEnabled(userId);
+      if (autoSyncEnabled) {
+        await pushAssignmentToMicrosoft(userId, params.id, req.nextUrl.origin);
+      }
+    } catch (error) {
+      console.error("PATCH /api/assignments/[id] auto Microsoft sync skipped", error);
+    }
   }
 
   return NextResponse.json(updated);

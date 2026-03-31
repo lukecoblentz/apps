@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 const REMINDER_PRESETS: { label: string; minutes: number }[] = [
   { label: "1 day before", minutes: 1440 },
@@ -13,14 +14,19 @@ export default function SettingsPage() {
   const [canvasBaseUrl, setCanvasBaseUrl] = useState("");
   const [canvasTokenInput, setCanvasTokenInput] = useState("");
   const [hasCanvasToken, setHasCanvasToken] = useState(false);
-  const [googleTokenInput, setGoogleTokenInput] = useState("");
   const [googleCalendarId, setGoogleCalendarId] = useState("primary");
   const [hasGoogleToken, setHasGoogleToken] = useState(false);
+  const [googleAutoSync, setGoogleAutoSync] = useState(false);
+  const [hasMicrosoftToken, setHasMicrosoftToken] = useState(false);
+  const [msAutoSync, setMsAutoSync] = useState(false);
   const [reminderSet, setReminderSet] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [googleConnecting, setGoogleConnecting] = useState(false);
+  const [msConnecting, setMsConnecting] = useState(false);
+  const searchParams = useSearchParams();
 
   async function load() {
     setLoading(true);
@@ -36,6 +42,9 @@ export default function SettingsPage() {
     setHasCanvasToken(Boolean(data.hasCanvasToken));
     setHasGoogleToken(Boolean(data.hasGoogleToken));
     setGoogleCalendarId(data.googleCalendarId || "primary");
+    setGoogleAutoSync(Boolean(data.googleAutoSync));
+    setHasMicrosoftToken(Boolean(data.hasMicrosoftToken));
+    setMsAutoSync(Boolean(data.msAutoSync));
     const mins: number[] = data.reminderMinutesBefore || [1440, 120];
     setReminderSet(new Set(mins));
     setLoading(false);
@@ -44,6 +53,34 @@ export default function SettingsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    const google = searchParams.get("google");
+    if (google === "connected") {
+      setMessage("Google Calendar connected.");
+      setError("");
+      void load();
+      return;
+    }
+    if (google === "error") {
+      setError("Google Calendar connection failed. Check OAuth environment variables and try again.");
+    }
+    const ms = searchParams.get("ms");
+    if (ms === "connected") {
+      setMessage("Microsoft Calendar connected.");
+      setError("");
+      void load();
+      return;
+    }
+    if (ms === "error") {
+      const detail = searchParams.get("detail");
+      setError(
+        detail
+          ? `Microsoft Calendar: ${detail}`
+          : "Microsoft Calendar connection failed. Check OAuth environment variables and try again."
+      );
+    }
+  }, [searchParams]);
 
   function toggleReminder(m: number) {
     setReminderSet((prev) => {
@@ -113,16 +150,13 @@ export default function SettingsPage() {
     setMessage("Canvas token removed from your account.");
   }
 
-  async function saveGoogle(e: FormEvent) {
+  async function saveGoogleCalendarId(e: FormEvent) {
     e.preventDefault();
     setMessage("");
     setError("");
     const body: Record<string, string> = {
       googleCalendarId: googleCalendarId || "primary"
     };
-    if (googleTokenInput.trim()) {
-      body.googleAccessToken = googleTokenInput.trim();
-    }
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -132,25 +166,84 @@ export default function SettingsPage() {
       setError("Could not save Google Calendar settings.");
       return;
     }
-    setGoogleTokenInput("");
-    setMessage("Google Calendar settings saved.");
+    setMessage("Google Calendar id saved.");
     void load();
   }
 
-  async function clearGoogleToken() {
+  async function saveGoogleAutoSync(nextValue: boolean) {
+    setMessage("");
+    setError("");
+    setGoogleAutoSync(nextValue);
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ googleAutoSync: nextValue })
+    });
+    if (!res.ok) {
+      setGoogleAutoSync(!nextValue);
+      setError("Could not update auto-sync setting.");
+      return;
+    }
+    setMessage(nextValue ? "Google auto-sync enabled." : "Google auto-sync disabled.");
+  }
+
+  async function disconnectGoogle() {
     setMessage("");
     setError("");
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ googleAccessToken: "" })
+      body: JSON.stringify({ googleDisconnect: true })
     });
     if (!res.ok) {
-      setError("Could not clear Google token.");
+      setError("Could not disconnect Google.");
       return;
     }
     setHasGoogleToken(false);
-    setMessage("Google token removed from your account.");
+    setMessage("Google Calendar disconnected.");
+  }
+
+  function connectGoogle() {
+    setGoogleConnecting(true);
+    window.location.href = "/api/google/connect";
+  }
+
+  async function saveMsAutoSync(nextValue: boolean) {
+    setMessage("");
+    setError("");
+    setMsAutoSync(nextValue);
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ msAutoSync: nextValue })
+    });
+    if (!res.ok) {
+      setMsAutoSync(!nextValue);
+      setError("Could not update Outlook auto-sync setting.");
+      return;
+    }
+    setMessage(nextValue ? "Outlook auto-sync enabled." : "Outlook auto-sync disabled.");
+  }
+
+  async function disconnectMicrosoft() {
+    setMessage("");
+    setError("");
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ msDisconnect: true })
+    });
+    if (!res.ok) {
+      setError("Could not disconnect Microsoft.");
+      return;
+    }
+    setHasMicrosoftToken(false);
+    setMessage("Microsoft Calendar disconnected.");
+  }
+
+  function connectMicrosoft() {
+    setMsConnecting(true);
+    window.location.href = "/api/microsoft/connect";
   }
 
   async function runSync() {
@@ -292,12 +385,12 @@ export default function SettingsPage() {
         </section>
 
         <section className="card settings-section">
-          <h2>Google Calendar (MVP)</h2>
+          <h2>Google Calendar</h2>
           <p className="card-subtitle">
-            Manual token flow for now: paste a Google OAuth access token and
-            choose a calendar id. Then use &quot;Push Google&quot; in Assignments.
+            Connect your Google account with OAuth, choose a calendar id, then
+            use &quot;Push Google&quot; in Assignments.
           </p>
-          <form className="form-stack" onSubmit={saveGoogle} style={{ marginTop: 16 }}>
+          <form className="form-stack" onSubmit={saveGoogleCalendarId} style={{ marginTop: 16 }}>
             <div className="field">
               <label htmlFor="google-calendar-id">Google calendar id</label>
               <input
@@ -308,38 +401,89 @@ export default function SettingsPage() {
                 autoComplete="off"
               />
             </div>
-            <div className="field">
-              <label htmlFor="google-token">Google access token</label>
-              <input
-                id="google-token"
-                type="password"
-                value={googleTokenInput}
-                onChange={(e) => setGoogleTokenInput(e.target.value)}
-                placeholder={
-                  hasGoogleToken
-                    ? "Paste new token to replace existing"
-                    : "Paste Google OAuth access token"
-                }
-                autoComplete="off"
-              />
+            <div className="row-actions">
+              <button type="submit" className="btn btn-primary">
+                Save calendar id
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={googleConnecting}
+                onClick={connectGoogle}
+              >
+                {googleConnecting ? "Redirecting…" : hasGoogleToken ? "Reconnect Google" : "Connect Google"}
+              </button>
               {hasGoogleToken ? (
-                <p className="muted" style={{ margin: "6px 0 0" }}>
-                  A token is saved. Replace it by pasting a new one, or{" "}
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ padding: "4px 8px", verticalAlign: "baseline" }}
-                    onClick={() => void clearGoogleToken()}
-                  >
-                    remove it
-                  </button>
-                  .
-                </p>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => void disconnectGoogle()}
+                >
+                  Disconnect
+                </button>
               ) : null}
             </div>
-            <button type="submit" className="btn btn-primary">
-              Save Google Calendar settings
-            </button>
+            <label style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={googleAutoSync}
+                onChange={(e) => void saveGoogleAutoSync(e.target.checked)}
+                disabled={!hasGoogleToken}
+              />
+              Auto-sync assignment create/edit to Google Calendar
+            </label>
+            {!hasGoogleToken ? (
+              <p className="muted" style={{ margin: "4px 0 0" }}>
+                Connect Google first to enable auto-sync.
+              </p>
+            ) : null}
+          </form>
+        </section>
+
+        <section className="card settings-section">
+          <h2>Microsoft Outlook Calendar</h2>
+          <p className="card-subtitle">
+            Connect your Microsoft account with OAuth, then use
+            &quot;Push Outlook&quot; in Assignments.
+          </p>
+          <form className="form-stack" style={{ marginTop: 16 }}>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={msConnecting}
+                onClick={connectMicrosoft}
+              >
+                {msConnecting
+                  ? "Redirecting…"
+                  : hasMicrosoftToken
+                    ? "Reconnect Outlook"
+                    : "Connect Outlook"}
+              </button>
+              {hasMicrosoftToken ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => void disconnectMicrosoft()}
+                >
+                  Disconnect
+                </button>
+              ) : null}
+            </div>
+            <label style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={msAutoSync}
+                onChange={(e) => void saveMsAutoSync(e.target.checked)}
+                disabled={!hasMicrosoftToken}
+              />
+              Auto-sync assignment create/edit to Outlook Calendar
+            </label>
+            {!hasMicrosoftToken ? (
+              <p className="muted" style={{ margin: "4px 0 0" }}>
+                Connect Outlook first to enable auto-sync.
+              </p>
+            ) : null}
           </form>
         </section>
       </div>

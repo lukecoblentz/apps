@@ -498,6 +498,45 @@ input[type="color"] {
   margin-top: 2px;
 }
 
+.assignments-list .assignment-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.assignments-list .assignment-main {
+  align-items: flex-start;
+  min-width: 0;
+  width: 100%;
+}
+
+.assignments-list .list-item-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
+.assignments-list .list-item-meta {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.assignments-list .assignment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  width: 100%;
+}
+
+.assignments-list .assignment-actions .btn {
+  min-width: 0;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -657,6 +696,11 @@ input[type="color"] {
   }
 
   .list-item .row-actions {
+    justify-content: flex-start;
+  }
+
+  .assignments-list .assignment-actions {
+    min-width: 0;
     justify-content: flex-start;
   }
 }

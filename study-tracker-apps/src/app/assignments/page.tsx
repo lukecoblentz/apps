@@ -15,6 +15,7 @@ type AssignmentItem = {
   description?: string;
   source?: string;
   googleEventId?: string;
+  msEventId?: string;
   classId?: { _id?: string; name?: string; color?: string };
 };
 
@@ -48,7 +49,11 @@ export default function AssignmentsPage() {
   const [editDue, setEditDue] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [actionError, setActionError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
   const [googleLoadingId, setGoogleLoadingId] = useState<string | null>(null);
+  const [googlePushAllLoading, setGooglePushAllLoading] = useState(false);
+  const [msLoadingId, setMsLoadingId] = useState<string | null>(null);
+  const [msPushAllLoading, setMsPushAllLoading] = useState(false);
 
   async function loadData() {
     const [cRes, aRes] = await Promise.all([
@@ -75,6 +80,7 @@ export default function AssignmentsPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setCreateError("");
+    setActionMessage("");
     if (!classId) {
       setCreateError("Create a class first, then assign work to it.");
       return;
@@ -127,6 +133,7 @@ export default function AssignmentsPage() {
   async function saveEdit(e: FormEvent) {
     e.preventDefault();
     if (!editingId) return;
+    setActionMessage("");
     const iso = new Date(editDue).toISOString();
     const res = await fetch(`/api/assignments/${editingId}`, {
       method: "PATCH",
@@ -149,6 +156,7 @@ export default function AssignmentsPage() {
 
   async function toggleStatus(item: AssignmentItem) {
     setActionError("");
+    setActionMessage("");
     const nextStatus = item.status === "todo" ? "done" : "todo";
     const res = await fetch(`/api/assignments/${item._id}`, {
       method: "PATCH",
@@ -165,6 +173,7 @@ export default function AssignmentsPage() {
 
   async function onDelete(id: string) {
     setActionError("");
+    setActionMessage("");
     const res = await fetch(`/api/assignments/${id}`, { method: "DELETE" });
     if (res.ok) {
       if (editingId === id) setEditingId(null);
@@ -177,6 +186,7 @@ export default function AssignmentsPage() {
 
   async function pushGoogle(assignmentId: string) {
     setActionError("");
+    setActionMessage("");
     setGoogleLoadingId(assignmentId);
     const res = await fetch("/api/google/push", {
       method: "POST",
@@ -186,10 +196,68 @@ export default function AssignmentsPage() {
     setGoogleLoadingId(null);
     if (res.ok) {
       await loadData();
+      setActionMessage("Assignment synced to Google Calendar.");
       return;
     }
     const payload = await res.json().catch(() => ({}));
     setActionError(payload?.error || "Could not push to Google Calendar.");
+  }
+
+  async function pushAllGoogle() {
+    setActionError("");
+    setActionMessage("");
+    setGooglePushAllLoading(true);
+    const res = await fetch("/api/google/push-all", { method: "POST" });
+    setGooglePushAllLoading(false);
+    const payload = await res.json().catch(() => ({}));
+    if (res.ok) {
+      await loadData();
+      const synced = Number(payload?.synced || 0);
+      const total = Number(payload?.total || 0);
+      const failed = Number(payload?.failed || 0);
+      setActionMessage(`Google sync finished: ${synced}/${total} assignments synced${failed ? `, ${failed} failed` : ""}.`);
+      return;
+    }
+    setActionError(payload?.error || "Could not push all assignments to Google.");
+  }
+
+  async function pushMicrosoft(assignmentId: string) {
+    setActionError("");
+    setActionMessage("");
+    setMsLoadingId(assignmentId);
+    const res = await fetch("/api/microsoft/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignmentId })
+    });
+    setMsLoadingId(null);
+    if (res.ok) {
+      await loadData();
+      setActionMessage("Assignment synced to Outlook Calendar.");
+      return;
+    }
+    const payload = await res.json().catch(() => ({}));
+    setActionError(payload?.error || "Could not push to Outlook Calendar.");
+  }
+
+  async function pushAllMicrosoft() {
+    setActionError("");
+    setActionMessage("");
+    setMsPushAllLoading(true);
+    const res = await fetch("/api/microsoft/push-all", { method: "POST" });
+    setMsPushAllLoading(false);
+    const payload = await res.json().catch(() => ({}));
+    if (res.ok) {
+      await loadData();
+      const synced = Number(payload?.synced || 0);
+      const total = Number(payload?.total || 0);
+      const failed = Number(payload?.failed || 0);
+      setActionMessage(
+        `Outlook sync finished: ${synced}/${total} assignments synced${failed ? `, ${failed} failed` : ""}.`
+      );
+      return;
+    }
+    setActionError(payload?.error || "Could not push all assignments to Outlook.");
   }
 
   return (
@@ -261,6 +329,7 @@ export default function AssignmentsPage() {
             ) : null}
             {createError ? <p className="alert-error">{createError}</p> : null}
             {actionError ? <p className="alert-error">{actionError}</p> : null}
+            {actionMessage ? <p className="muted">{actionMessage}</p> : null}
           </form>
         </section>
 
@@ -270,9 +339,25 @@ export default function AssignmentsPage() {
               <h2>All assignments</h2>
               <p className="card-subtitle">Sorted by due date</p>
             </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={googlePushAllLoading || assignments.length === 0}
+              onClick={() => void pushAllGoogle()}
+            >
+              {googlePushAllLoading ? "Pushing all..." : "Push all to Google"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={msPushAllLoading || assignments.length === 0}
+              onClick={() => void pushAllMicrosoft()}
+            >
+              {msPushAllLoading ? "Pushing all..." : "Push all to Outlook"}
+            </button>
           </div>
           {assignments.length ? (
-            <ul className="list-plain">
+            <ul className="list-plain assignments-list">
               {assignments.map((a) =>
                 editingId === a._id ? (
                   <li key={a._id} className="list-item" style={{ flexWrap: "wrap" }}>
@@ -323,8 +408,8 @@ export default function AssignmentsPage() {
                     </form>
                   </li>
                 ) : (
-                  <li key={a._id} className="list-item">
-                    <div className="list-item-main" style={{ minWidth: 0 }}>
+                  <li key={a._id} className="list-item assignment-row">
+                    <div className="list-item-main assignment-main" style={{ minWidth: 0 }}>
                       {a.classId?.color ? (
                         <span
                           className="class-swatch"
@@ -346,13 +431,7 @@ export default function AssignmentsPage() {
                         </div>
                       </div>
                     </div>
-                    <div
-                      className="row-actions"
-                      style={{
-                        flexShrink: 0,
-                        alignItems: "center"
-                      }}
-                    >
+                    <div className="row-actions assignment-actions">
                       <span
                         className={
                           a.status === "done" ? "badge badge-done" : "badge badge-todo"
@@ -378,6 +457,18 @@ export default function AssignmentsPage() {
                           : a.googleEventId
                             ? "Update Google"
                             : "Push Google"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => pushMicrosoft(a._id)}
+                        disabled={msLoadingId === a._id}
+                      >
+                        {msLoadingId === a._id
+                          ? "Pushing..."
+                          : a.msEventId
+                            ? "Update Outlook"
+                            : "Push Outlook"}
                       </button>
                       <button
                         type="button"

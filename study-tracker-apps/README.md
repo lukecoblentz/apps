@@ -16,6 +16,8 @@ Copy `.env.example` to `.env.local` and fill in values:
 - `NEXTAUTH_URL` — App origin (e.g. `http://localhost:3000` locally, or your production URL).
 - `NEXTAUTH_SECRET` — Long random string (e.g. `openssl rand -base64 32`).
 - **Reminders (optional locally, recommended in production):** `RESEND_API_KEY`, `EMAIL_FROM` (verified sender), `CRON_SECRET` (protects `/api/cron/reminders`; Vercel sends this as `Authorization: Bearer …` when the job runs).
+- **Google Calendar OAuth:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and optional `GOOGLE_REDIRECT_URI` (defaults to `${NEXTAUTH_URL}/api/google/callback`).
+- **Microsoft Calendar OAuth:** `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, and optional `MICROSOFT_REDIRECT_URI` (defaults to `${NEXTAUTH_URL}/api/microsoft/callback`).
 
 ## 3) Run development server
 
@@ -59,4 +61,5 @@ If `CRON_SECRET` is unset in local dev, the route accepts unauthenticated GET fo
 - Classes (colors, edit/remove) and assignments (edit, due dates, done/todo).
 - Dashboard tabs: due today, overdue, next 7 days, recently done.
 - Settings: reminder presets (email via Resend + hourly Vercel Cron), Canvas base URL + token, sync from Canvas planner items.
-- Calendar (Google/Outlook) described in Settings as a planned phase.
+- Google Calendar OAuth connect/disconnect + assignment push/update.
+- Outlook Calendar OAuth connect/disconnect + assignment push/update.

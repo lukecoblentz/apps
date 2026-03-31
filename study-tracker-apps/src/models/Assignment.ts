@@ -18,6 +18,7 @@ const assignmentSchema = new Schema(
     },
     externalId: { type: String, sparse: true, index: true },
     googleEventId: { type: String, default: "" },
+    msEventId: { type: String, default: "" },
     userId: { type: String, required: true, index: true }
   },
   { timestamps: true }
