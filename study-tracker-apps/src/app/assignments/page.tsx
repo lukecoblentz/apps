@@ -39,6 +39,8 @@ export default function AssignmentsPage() {
   const [classId, setClassId] = useState("");
   const [dueAt, setDueAt] = useState("");
   const [description, setDescription] = useState("");
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editClassId, setEditClassId] = useState("");
@@ -69,7 +71,18 @@ export default function AssignmentsPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const iso = new Date(dueAt).toISOString();
+    setCreateError("");
+    if (!classId) {
+      setCreateError("Create a class first, then assign work to it.");
+      return;
+    }
+    const parsedDue = new Date(dueAt);
+    if (Number.isNaN(parsedDue.getTime())) {
+      setCreateError("Pick a valid due date/time.");
+      return;
+    }
+    setCreateLoading(true);
+    const iso = parsedDue.toISOString();
     const res = await fetch("/api/assignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -80,7 +93,16 @@ export default function AssignmentsPage() {
       setDescription("");
       setDueAt("");
       await loadData();
+      setCreateLoading(false);
+      return;
     }
+    const payload = await res.json().catch(() => ({}));
+    if (typeof payload?.error === "string") {
+      setCreateError(payload.error);
+    } else {
+      setCreateError("Could not add assignment. Check your session and try again.");
+    }
+    setCreateLoading(false);
   }
 
   function startEdit(a: AssignmentItem) {
@@ -201,8 +223,12 @@ export default function AssignmentsPage() {
               />
             </div>
             <button className="btn btn-primary" type="submit">
-              Add assignment
+              {createLoading ? "Adding..." : "Add assignment"}
             </button>
+            {classes.length === 0 ? (
+              <p className="alert-error">No classes found. Add one in Classes first.</p>
+            ) : null}
+            {createError ? <p className="alert-error">{createError}</p> : null}
           </form>
         </section>
 
