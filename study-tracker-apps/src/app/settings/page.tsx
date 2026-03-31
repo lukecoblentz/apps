@@ -13,6 +13,9 @@ export default function SettingsPage() {
   const [canvasBaseUrl, setCanvasBaseUrl] = useState("");
   const [canvasTokenInput, setCanvasTokenInput] = useState("");
   const [hasCanvasToken, setHasCanvasToken] = useState(false);
+  const [googleTokenInput, setGoogleTokenInput] = useState("");
+  const [googleCalendarId, setGoogleCalendarId] = useState("primary");
+  const [hasGoogleToken, setHasGoogleToken] = useState(false);
   const [reminderSet, setReminderSet] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -31,6 +34,8 @@ export default function SettingsPage() {
     const data = await res.json();
     setCanvasBaseUrl(data.canvasBaseUrl || "");
     setHasCanvasToken(Boolean(data.hasCanvasToken));
+    setHasGoogleToken(Boolean(data.hasGoogleToken));
+    setGoogleCalendarId(data.googleCalendarId || "primary");
     const mins: number[] = data.reminderMinutesBefore || [1440, 120];
     setReminderSet(new Set(mins));
     setLoading(false);
@@ -106,6 +111,46 @@ export default function SettingsPage() {
     }
     setHasCanvasToken(false);
     setMessage("Canvas token removed from your account.");
+  }
+
+  async function saveGoogle(e: FormEvent) {
+    e.preventDefault();
+    setMessage("");
+    setError("");
+    const body: Record<string, string> = {
+      googleCalendarId: googleCalendarId || "primary"
+    };
+    if (googleTokenInput.trim()) {
+      body.googleAccessToken = googleTokenInput.trim();
+    }
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      setError("Could not save Google Calendar settings.");
+      return;
+    }
+    setGoogleTokenInput("");
+    setMessage("Google Calendar settings saved.");
+    void load();
+  }
+
+  async function clearGoogleToken() {
+    setMessage("");
+    setError("");
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ googleAccessToken: "" })
+    });
+    if (!res.ok) {
+      setError("Could not clear Google token.");
+      return;
+    }
+    setHasGoogleToken(false);
+    setMessage("Google token removed from your account.");
   }
 
   async function runSync() {
@@ -247,13 +292,55 @@ export default function SettingsPage() {
         </section>
 
         <section className="card settings-section">
-          <h2>Google Calendar &amp; Outlook</h2>
-          <p className="muted" style={{ margin: 0 }}>
-            Phase 4: OAuth to push selected assignments, with optional
-            per-class or combined calendars. Env placeholders:{" "}
-            <code>GOOGLE_CLIENT_ID</code>, <code>MICROSOFT_CLIENT_ID</code>{" "}
-            (not wired yet in this build).
+          <h2>Google Calendar (MVP)</h2>
+          <p className="card-subtitle">
+            Manual token flow for now: paste a Google OAuth access token and
+            choose a calendar id. Then use &quot;Push Google&quot; in Assignments.
           </p>
+          <form className="form-stack" onSubmit={saveGoogle} style={{ marginTop: 16 }}>
+            <div className="field">
+              <label htmlFor="google-calendar-id">Google calendar id</label>
+              <input
+                id="google-calendar-id"
+                value={googleCalendarId}
+                onChange={(e) => setGoogleCalendarId(e.target.value)}
+                placeholder="primary"
+                autoComplete="off"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="google-token">Google access token</label>
+              <input
+                id="google-token"
+                type="password"
+                value={googleTokenInput}
+                onChange={(e) => setGoogleTokenInput(e.target.value)}
+                placeholder={
+                  hasGoogleToken
+                    ? "Paste new token to replace existing"
+                    : "Paste Google OAuth access token"
+                }
+                autoComplete="off"
+              />
+              {hasGoogleToken ? (
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  A token is saved. Replace it by pasting a new one, or{" "}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: "4px 8px", verticalAlign: "baseline" }}
+                    onClick={() => void clearGoogleToken()}
+                  >
+                    remove it
+                  </button>
+                  .
+                </p>
+              ) : null}
+            </div>
+            <button type="submit" className="btn btn-primary">
+              Save Google Calendar settings
+            </button>
+          </form>
         </section>
       </div>
     </>

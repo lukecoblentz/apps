@@ -14,6 +14,7 @@ type AssignmentItem = {
   status: "todo" | "done";
   description?: string;
   source?: string;
+  googleEventId?: string;
   classId?: { _id?: string; name?: string; color?: string };
 };
 
@@ -46,6 +47,8 @@ export default function AssignmentsPage() {
   const [editClassId, setEditClassId] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [googleLoadingId, setGoogleLoadingId] = useState<string | null>(null);
 
   async function loadData() {
     const [cRes, aRes] = await Promise.all([
@@ -138,10 +141,14 @@ export default function AssignmentsPage() {
     if (res.ok) {
       setEditingId(null);
       await loadData();
+      return;
     }
+    const payload = await res.json().catch(() => ({}));
+    setActionError(payload?.error || "Could not save assignment changes.");
   }
 
   async function toggleStatus(item: AssignmentItem) {
+    setActionError("");
     const nextStatus = item.status === "todo" ? "done" : "todo";
     const res = await fetch(`/api/assignments/${item._id}`, {
       method: "PATCH",
@@ -150,15 +157,39 @@ export default function AssignmentsPage() {
     });
     if (res.ok) {
       await loadData();
+      return;
     }
+    const payload = await res.json().catch(() => ({}));
+    setActionError(payload?.error || "Could not update assignment status.");
   }
 
   async function onDelete(id: string) {
+    setActionError("");
     const res = await fetch(`/api/assignments/${id}`, { method: "DELETE" });
     if (res.ok) {
       if (editingId === id) setEditingId(null);
       await loadData();
+      return;
     }
+    const payload = await res.json().catch(() => ({}));
+    setActionError(payload?.error || "Could not delete assignment.");
+  }
+
+  async function pushGoogle(assignmentId: string) {
+    setActionError("");
+    setGoogleLoadingId(assignmentId);
+    const res = await fetch("/api/google/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignmentId })
+    });
+    setGoogleLoadingId(null);
+    if (res.ok) {
+      await loadData();
+      return;
+    }
+    const payload = await res.json().catch(() => ({}));
+    setActionError(payload?.error || "Could not push to Google Calendar.");
   }
 
   return (
@@ -229,6 +260,7 @@ export default function AssignmentsPage() {
               <p className="alert-error">No classes found. Add one in Classes first.</p>
             ) : null}
             {createError ? <p className="alert-error">{createError}</p> : null}
+            {actionError ? <p className="alert-error">{actionError}</p> : null}
           </form>
         </section>
 
@@ -334,6 +366,18 @@ export default function AssignmentsPage() {
                         onClick={() => startEdit(a)}
                       >
                         Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => pushGoogle(a._id)}
+                        disabled={googleLoadingId === a._id}
+                      >
+                        {googleLoadingId === a._id
+                          ? "Pushing..."
+                          : a.googleEventId
+                            ? "Update Google"
+                            : "Push Google"}
                       </button>
                       <button
                         type="button"

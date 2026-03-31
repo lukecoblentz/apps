@@ -11,7 +11,9 @@ const patchSchema = z
       .max(10)
       .optional(),
     canvasBaseUrl: z.string().max(500).optional(),
-    canvasAccessToken: z.string().max(20000).optional()
+    canvasAccessToken: z.string().max(20000).optional(),
+    googleAccessToken: z.string().max(20000).optional(),
+    googleCalendarId: z.string().max(400).optional()
   })
   .strict();
 
@@ -31,13 +33,17 @@ export async function GET() {
     reminderMinutesBefore?: number[];
     canvasBaseUrl?: string;
     canvasAccessToken?: string;
+    googleAccessToken?: string;
+    googleCalendarId?: string;
   };
   const reminders = user.reminderMinutesBefore;
   return NextResponse.json({
     reminderMinutesBefore:
       reminders && reminders.length > 0 ? reminders : [1440, 120],
     canvasBaseUrl: user.canvasBaseUrl || "",
-    hasCanvasToken: Boolean(user.canvasAccessToken)
+    hasCanvasToken: Boolean(user.canvasAccessToken),
+    hasGoogleToken: Boolean(user.googleAccessToken),
+    googleCalendarId: user.googleCalendarId || "primary"
   });
 }
 
@@ -82,6 +88,16 @@ export async function PATCH(req: NextRequest) {
     } else {
       $set.canvasAccessToken = parsed.data.canvasAccessToken;
     }
+  }
+  if (parsed.data.googleAccessToken !== undefined) {
+    if (parsed.data.googleAccessToken === "") {
+      $set.googleAccessToken = "";
+    } else {
+      $set.googleAccessToken = parsed.data.googleAccessToken;
+    }
+  }
+  if (parsed.data.googleCalendarId !== undefined) {
+    $set.googleCalendarId = parsed.data.googleCalendarId || "primary";
   }
 
   if (Object.keys($set).length === 0) {

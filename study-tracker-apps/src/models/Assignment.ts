@@ -17,6 +17,7 @@ const assignmentSchema = new Schema(
       default: "manual"
     },
     externalId: { type: String, sparse: true, index: true },
+    googleEventId: { type: String, default: "" },
     userId: { type: String, required: true, index: true }
   },
   { timestamps: true }

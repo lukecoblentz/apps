@@ -13,6 +13,8 @@ const userSchema = new Schema(
     passwordHash: { type: String, required: true },
     canvasBaseUrl: { type: String, default: "" },
     canvasAccessToken: { type: String, default: "" },
+    googleAccessToken: { type: String, default: "" },
+    googleCalendarId: { type: String, default: "primary" },
     /** Minutes before due date to remind (e.g. 1440 = 1 day, 120 = 2 hours). */
     reminderMinutesBefore: {
       type: [Number],

@@ -10,6 +10,7 @@ export const config = {
     "/api/assignments/:path*",
     "/api/dashboard/:path*",
     "/api/settings/:path*",
-    "/api/canvas/:path*"
+    "/api/canvas/:path*",
+    "/api/google/:path*"
   ]
 };
