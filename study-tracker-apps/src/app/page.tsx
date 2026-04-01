@@ -37,6 +37,20 @@ type TabKey = "today" | "overdue" | "week" | "done";
 
 type LoadState = "loading" | "ready" | "error";
 
+const TAB_HINTS: Record<TabKey, string> = {
+  today: "Everything due before midnight.",
+  overdue: "Still marked to-do — tackle these first.",
+  week: "After today, within the next week.",
+  done: "Latest completions (last actions first)."
+};
+
+const TAB_KEYS: { key: TabKey; label: string }[] = [
+  { key: "today", label: "Due today" },
+  { key: "overdue", label: "Overdue" },
+  { key: "week", label: "Next 7 days" },
+  { key: "done", label: "Done" }
+];
+
 export default function HomePage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -78,25 +92,6 @@ export default function HomePage() {
           : tab === "week"
             ? data.thisWeek
             : data.done;
-
-  const tabLabels: Record<TabKey, { label: string; hint: string }> = {
-    today: {
-      label: "Due today",
-      hint: "Everything due before midnight."
-    },
-    overdue: {
-      label: "Overdue",
-      hint: "Still marked to-do — tackle these first."
-    },
-    week: {
-      label: "Next 7 days",
-      hint: "After today, within the next week."
-    },
-    done: {
-      label: "Recently done",
-      hint: "Latest completions (last actions first)."
-    }
-  };
 
   return (
     <>
@@ -143,19 +138,12 @@ export default function HomePage() {
           <div className="card-header">
             <div>
               <h2>Tasks</h2>
-              <p className="card-subtitle">{tabLabels[tab].hint}</p>
+              <p className="card-subtitle">{TAB_HINTS[tab]}</p>
             </div>
           </div>
 
           <div className="tabs" role="tablist">
-            {(
-              [
-                ["today", "Due today"] as const,
-                ["overdue", "Overdue"] as const,
-                ["week", "Next 7 days"] as const,
-                ["done", "Done"] as const
-              ] as const
-            ).map(([key, label]) => (
+            {TAB_KEYS.map(({ key, label }) => (
               <button
                 key={key}
                 type="button"

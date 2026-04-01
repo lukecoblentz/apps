@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { inferPriorityFromTitle } from "@/lib/assignment-priority";
+import { formatDueShort, toDatetimeLocalValue } from "@/lib/assignments-datetime";
+import { scrollFirstMarkDoneIntoView } from "@/lib/assignments-scroll";
 import {
   type AssignmentItem,
   type ClassItem,
@@ -11,40 +13,6 @@ import {
   mergeAssignmentFromApi,
   partitionAssignments
 } from "@/lib/assignments-list";
-
-function toDatetimeLocalValue(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function formatDue(d: string) {
-  return new Date(d).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  });
-}
-
-function scrollFirstMarkDoneIntoView() {
-  if (typeof window === "undefined") return;
-  requestAnimationFrame(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const board = document.querySelector(".assignments-board");
-    if (!board) return;
-    const btns = board.querySelectorAll("button.btn-primary.btn-sm");
-    for (const btn of btns) {
-      if (btn.textContent?.trim() === "Mark done") {
-        (btn as HTMLElement).scrollIntoView({
-          behavior: reduce ? "auto" : "smooth",
-          block: "nearest"
-        });
-        break;
-      }
-    }
-  });
-}
 
 export default function AssignmentsPage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -74,16 +42,18 @@ export default function AssignmentsPage() {
   const [msPushAllLoading, setMsPushAllLoading] = useState(false);
   const [enteringDoneIds, setEnteringDoneIds] = useState(() => new Set<string>());
   const priorityTouchedRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
 
   async function loadData() {
-    setDataLoading(true);
+    const showSkeleton = !hasLoadedOnceRef.current;
+    if (showSkeleton) setDataLoading(true);
     try {
       const [cRes, aRes] = await Promise.all([
         fetch("/api/classes", { cache: "no-store" }),
         fetch("/api/assignments", { cache: "no-store" })
       ]);
       if (cRes.ok) {
-        const classData = await cRes.json();
+        const classData: ClassItem[] = await cRes.json();
         setClasses(classData);
         if (!classId && classData[0]?._id) {
           setClassId(classData[0]._id);
@@ -93,6 +63,7 @@ export default function AssignmentsPage() {
         setAssignments(await aRes.json());
       }
     } finally {
+      hasLoadedOnceRef.current = true;
       setDataLoading(false);
     }
   }
@@ -106,7 +77,8 @@ export default function AssignmentsPage() {
     const hash = typeof window !== "undefined" ? window.location.hash : "";
     if (!hash.startsWith("#assignment-")) return;
     const el = document.querySelector(hash);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
   }, [assignments]);
 
   const filteredAssignments = useMemo(
@@ -154,7 +126,7 @@ export default function AssignmentsPage() {
       priorityTouchedRef.current = false;
       setPriority("normal");
       setCreateSuccess("Assignment added.");
-      setTimeout(() => setCreateSuccess(""), 6000);
+      window.setTimeout(() => setCreateSuccess(""), 5000);
       await loadData();
       setCreateLoading(false);
       return;
@@ -202,8 +174,16 @@ export default function AssignmentsPage() {
       })
     });
     if (res.ok) {
-      setEditingId(null);
-      await loadData();
+      try {
+        const data = (await res.json()) as AssignmentItem;
+        setEditingId(null);
+        setAssignments((curr) =>
+          curr.map((x) => (x._id === editingId ? mergeAssignmentFromApi(x, data) : x))
+        );
+      } catch {
+        setEditingId(null);
+        await loadData();
+      }
       return;
     }
     const payload = await res.json().catch(() => ({}));
@@ -228,7 +208,7 @@ export default function AssignmentsPage() {
           next.delete(item._id);
           return next;
         });
-      }, 420);
+      }, 260);
       scrollFirstMarkDoneIntoView();
     }
 
@@ -267,12 +247,16 @@ export default function AssignmentsPage() {
   async function onDelete(id: string) {
     setActionError("");
     setActionMessage("");
+    const snapshot = assignments;
+    const wasEditing = editingId === id;
+    setAssignments((curr) => curr.filter((x) => x._id !== id));
+    if (wasEditing) setEditingId(null);
     const res = await fetch(`/api/assignments/${id}`, { method: "DELETE" });
     if (res.ok) {
-      if (editingId === id) setEditingId(null);
-      await loadData();
       return;
     }
+    setAssignments(snapshot);
+    if (wasEditing) setEditingId(id);
     const payload = await res.json().catch(() => ({}));
     setActionError(payload?.error || "Could not delete assignment.");
   }
@@ -288,7 +272,14 @@ export default function AssignmentsPage() {
     });
     setGoogleLoadingId(null);
     if (res.ok) {
-      await loadData();
+      const payload = await res.json().catch(() => ({}));
+      const gid =
+        typeof payload?.googleEventId === "string" ? payload.googleEventId : undefined;
+      if (gid) {
+        setAssignments((curr) =>
+          curr.map((x) => (x._id === assignmentId ? { ...x, googleEventId: gid } : x))
+        );
+      }
       setActionMessage("Assignment synced to Google Calendar.");
       return;
     }
@@ -325,7 +316,13 @@ export default function AssignmentsPage() {
     });
     setMsLoadingId(null);
     if (res.ok) {
-      await loadData();
+      const payload = await res.json().catch(() => ({}));
+      const mid = typeof payload?.msEventId === "string" ? payload.msEventId : undefined;
+      if (mid) {
+        setAssignments((curr) =>
+          curr.map((x) => (x._id === assignmentId ? { ...x, msEventId: mid } : x))
+        );
+      }
       setActionMessage("Assignment synced to Outlook Calendar.");
       return;
     }
@@ -443,7 +440,7 @@ export default function AssignmentsPage() {
               ) : null}
             </div>
             <div className="list-item-meta">
-              {a.classId?.name ?? "Class"} · {formatDue(a.dueAt)}
+              {a.classId?.name ?? "Class"} · {formatDueShort(a.dueAt)}
               {a.source === "canvas" ? " · Canvas" : ""}
               {opts.overdue ? " · Overdue" : ""}
             </div>

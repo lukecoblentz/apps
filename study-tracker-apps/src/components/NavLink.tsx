@@ -16,6 +16,7 @@ export default function NavLink({ href, children }: NavLinkProps) {
   return (
     <Link
       href={href}
+      prefetch
       className="nav-link"
       style={
         active

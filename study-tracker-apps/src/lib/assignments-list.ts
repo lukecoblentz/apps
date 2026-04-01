@@ -1,6 +1,7 @@
 export type ClassItem = {
   _id: string;
   name: string;
+  color?: string;
 };
 
 export type Priority = "low" | "normal" | "high";
