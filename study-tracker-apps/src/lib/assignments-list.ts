@@ -1,3 +1,9 @@
+import {
+  endOfCalendarDayInTimeZone,
+  endOfUpcomingSundayNight,
+  formatDateOnlyInTimeZone
+} from "@/lib/calendar-due-display";
+
 export type ClassItem = {
   _id: string;
   name: string;
@@ -23,7 +29,14 @@ export type AssignmentItem = {
 export type SortMode = "deadline_asc" | "deadline_desc" | "priority_desc";
 
 /** Subset of statuses for toolbar filter */
-export type StatusFilter = "all" | "todo" | "done" | "overdue" | "due_soon";
+export type StatusFilter =
+  | "all"
+  | "todo"
+  | "done"
+  | "overdue"
+  | "due_soon"
+  | "due_today"
+  | "due_this_week";
 
 export type DueUrgency = "done" | "overdue" | "due_soon" | "upcoming";
 
@@ -49,7 +62,8 @@ export function getDueUrgency(
 export function applyStatusFilter(
   list: AssignmentItem[],
   filter: StatusFilter,
-  nowMs: number
+  nowMs: number,
+  timeZone: string
 ): AssignmentItem[] {
   if (filter === "all") return list;
   if (filter === "done") {
@@ -70,6 +84,26 @@ export function applyStatusFilter(
       if (normalizeAssignmentStatus(a.status) === "done") return false;
       const t = new Date(a.dueAt).getTime();
       return !Number.isNaN(t) && t >= nowMs && t <= nowMs + 72 * 3600000;
+    });
+  }
+  if (filter === "due_today") {
+    const todayYmd = formatDateOnlyInTimeZone(new Date(nowMs), timeZone);
+    return list.filter((a) => {
+      if (normalizeAssignmentStatus(a.status) === "done") return false;
+      const dueYmd = formatDateOnlyInTimeZone(new Date(a.dueAt), timeZone);
+      return dueYmd === todayYmd;
+    });
+  }
+  if (filter === "due_this_week") {
+    const now = new Date(nowMs);
+    const todayYmd = formatDateOnlyInTimeZone(now, timeZone);
+    const todayEndMs = endOfCalendarDayInTimeZone(todayYmd, timeZone).getTime();
+    const weekEndMs = endOfUpcomingSundayNight(now, timeZone).getTime();
+    return list.filter((a) => {
+      if (normalizeAssignmentStatus(a.status) === "done") return false;
+      const t = new Date(a.dueAt).getTime();
+      if (Number.isNaN(t)) return false;
+      return t > todayEndMs && t <= weekEndMs;
     });
   }
   return list;
@@ -142,6 +176,9 @@ export function partitionForFilter(
     }
     return { overdue: [], upcoming, done: [] };
   }
+  if (statusFilter === "due_today" || statusFilter === "due_this_week") {
+    return { overdue: [], upcoming: filtered, done: [] };
+  }
   return partitionAssignments(filtered);
 }
 
@@ -164,6 +201,26 @@ export function filterAssignments(
     );
   }
   return out;
+}
+
+/** `?filter=` on `/assignments` — matches dashboard stat deep links. */
+export function parseAssignmentFilterFromSearchParams(searchParams: {
+  get: (key: string) => string | null;
+}): StatusFilter | null {
+  const raw = searchParams.get("filter")?.trim().toLowerCase() ?? "";
+  if (!raw) return null;
+  const map: Record<string, StatusFilter> = {
+    all: "all",
+    overdue: "overdue",
+    due_today: "due_today",
+    today: "due_today",
+    due_this_week: "due_this_week",
+    week: "due_this_week",
+    due_soon: "due_soon",
+    todo: "todo",
+    done: "done"
+  };
+  return map[raw] ?? null;
 }
 
 export function mergeAssignmentFromApi(

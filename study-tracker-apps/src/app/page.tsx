@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import StudyTimer from "@/components/study/StudyTimer";
@@ -284,7 +285,12 @@ export default function HomePage() {
           </section>
 
           <div className="stat-grid stat-grid-dashboard">
-            <article className="stat-card stat-today">
+            <Link
+              href="/assignments?filter=due_today"
+              className="stat-card stat-today stat-card--link"
+              prefetch
+              aria-label={`Due today: ${counts.dueToday} assignments. Open filtered list.`}
+            >
               <div className="stat-label">Due today</div>
               <div className="stat-value">
                 {loadState === "loading" ? (
@@ -293,8 +299,13 @@ export default function HomePage() {
                   counts.dueToday
                 )}
               </div>
-            </article>
-            <article className="stat-card stat-overdue">
+            </Link>
+            <Link
+              href="/assignments?filter=overdue"
+              className="stat-card stat-overdue stat-card--link"
+              prefetch
+              aria-label={`Overdue: ${counts.overdue} assignments. Open filtered list.`}
+            >
               <div className="stat-label">Overdue</div>
               <div className="stat-value">
                 {loadState === "loading" ? (
@@ -303,8 +314,13 @@ export default function HomePage() {
                   counts.overdue
                 )}
               </div>
-            </article>
-            <article className="stat-card">
+            </Link>
+            <Link
+              href="/assignments?filter=due_this_week"
+              className="stat-card stat-card--link"
+              prefetch
+              aria-label={`Due this week: ${counts.thisWeek} assignments. Open filtered list.`}
+            >
               <div className="stat-label">Due this week</div>
               <div className="stat-value">
                 {loadState === "loading" ? (
@@ -313,7 +329,7 @@ export default function HomePage() {
                   counts.thisWeek
                 )}
               </div>
-            </article>
+            </Link>
           </div>
         </aside>
       </div>
