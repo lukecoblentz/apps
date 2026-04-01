@@ -20,6 +20,7 @@ export const config = {
     "/api/microsoft/:path*",
     "/api/subjects/:path*",
     "/api/study-sessions/:path*",
-    "/api/analytics/:path*"
+    "/api/analytics/:path*",
+    "/api/bug-report"
   ]
 };

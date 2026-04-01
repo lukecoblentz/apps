@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import ReportBugDialog from "@/components/ReportBugDialog";
 
 const SETTINGS_SECTIONS: { id: string; label: string }[] = [
   { id: "settings-goals", label: "Goals" },
@@ -44,6 +45,7 @@ export default function SettingsPage() {
   const [weeklyGoalMinutes, setWeeklyGoalMinutes] = useState(600);
   const [googleConnecting, setGoogleConnecting] = useState(false);
   const [msConnecting, setMsConnecting] = useState(false);
+  const [bugDialogOpen, setBugDialogOpen] = useState(false);
   const searchParams = useSearchParams();
 
   async function load() {
@@ -421,12 +423,23 @@ export default function SettingsPage() {
       </header>
 
       <nav className="settings-tabs" aria-label="Jump to section">
-        {SETTINGS_SECTIONS.map(({ id, label }) => (
-          <a key={id} href={`#${id}`} className="settings-tab-pill">
-            {label}
-          </a>
-        ))}
+        <div className="settings-tabs-inner">
+          {SETTINGS_SECTIONS.map(({ id, label }) => (
+            <a key={id} href={`#${id}`} className="settings-tab-pill">
+              {label}
+            </a>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="settings-bug-btn"
+          onClick={() => setBugDialogOpen(true)}
+        >
+          Report a bug
+        </button>
       </nav>
+
+      <ReportBugDialog open={bugDialogOpen} onClose={() => setBugDialogOpen(false)} />
 
       <div className="grid">
         {message ? <p className="banner-success">{message}</p> : null}

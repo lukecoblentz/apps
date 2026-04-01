@@ -108,6 +108,59 @@ export async function sendPasswordResetEmail(input: { to: string; resetUrl: stri
   return { sent: true as const };
 }
 
+export async function sendBugReportEmail(input: {
+  to: string;
+  reporterEmail: string;
+  userId: string;
+  comment: string;
+  pageUrl?: string;
+}) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.warn("[bug-report] RESEND_API_KEY is not set; bug report email skipped");
+    return { sent: false as const, reason: "no_api_key" as const };
+  }
+
+  const from =
+    process.env.EMAIL_FROM?.trim() || "Study Tracker <onboarding@resend.dev>";
+
+  const subject = `[Study Tracker] Bug report from ${input.reporterEmail || input.userId}`;
+  const meta = [
+    `User ID: ${input.userId}`,
+    `Email: ${input.reporterEmail || "(none)"}`,
+    input.pageUrl ? `Page: ${input.pageUrl}` : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const text = `${meta}\n\n---\n\n${input.comment}\n`;
+  const metaHtml = escapeHtml(meta).replace(/\n/g, "<br/>");
+  const safeComment = escapeHtml(input.comment).replace(/\n/g, "<br/>");
+
+  const html = `
+    <p style="font-family:system-ui,sans-serif;font-size:13px;color:#64748b;">${metaHtml}</p>
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;" />
+    <p style="font-family:system-ui,sans-serif;font-size:15px;color:#0f172a;">${safeComment}</p>
+  `;
+
+  const resend = new Resend(key);
+  const { error } = await resend.emails.send({
+    from,
+    to: input.to,
+    subject,
+    text,
+    html,
+    replyTo: input.reporterEmail || undefined
+  });
+
+  if (error) {
+    console.error("[bug-report] Resend error", error);
+    return { sent: false as const, reason: "resend_error" as const, error };
+  }
+
+  return { sent: true as const };
+}
+
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, "&amp;")
