@@ -1,6 +1,8 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { fetchDashboardWithRetry } from "@/lib/fetch-dashboard";
 
 type AssignmentRow = {
   _id: string;
@@ -52,29 +54,44 @@ const TAB_KEYS: { key: TabKey; label: string }[] = [
 ];
 
 export default function HomePage() {
+  const { status: sessionStatus } = useSession();
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [tab, setTab] = useState<TabKey>("today");
 
   useEffect(() => {
+    if (sessionStatus === "loading") {
+      return;
+    }
+    if (sessionStatus !== "authenticated") {
+      setLoadState("error");
+      setData(null);
+      return;
+    }
+
+    let cancelled = false;
+
     async function loadDashboard() {
       setLoadState("loading");
       try {
-        const res = await fetch("/api/dashboard", { cache: "no-store" });
-        if (!res.ok) {
+        const json = (await fetchDashboardWithRetry()) as DashboardPayload;
+        if (!cancelled) {
+          setData(json);
+          setLoadState("ready");
+        }
+      } catch {
+        if (!cancelled) {
           setLoadState("error");
           setData(null);
-          return;
         }
-        setData(await res.json());
-        setLoadState("ready");
-      } catch {
-        setLoadState("error");
-        setData(null);
       }
     }
+
     void loadDashboard();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionStatus]);
 
   const counts = data?.counts ?? {
     dueToday: 0,
