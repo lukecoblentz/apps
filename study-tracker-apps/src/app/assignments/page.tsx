@@ -11,6 +11,7 @@ import {
   type Priority,
   filterAssignments,
   mergeAssignmentFromApi,
+  normalizeAssignmentStatus,
   partitionAssignments
 } from "@/lib/assignments-list";
 
@@ -81,7 +82,12 @@ export default function AssignmentsPage() {
         }
       }
       if (aRes.ok) {
-        setAssignments(await aRes.json());
+        const raw = (await aRes.json()) as AssignmentItem[];
+        setAssignments(
+          Array.isArray(raw)
+            ? raw.map((a) => ({ ...a, status: normalizeAssignmentStatus(a.status) }))
+            : []
+        );
       }
     } finally {
       hasLoadedOnceRef.current = true;
@@ -214,36 +220,41 @@ export default function AssignmentsPage() {
   async function toggleStatus(item: AssignmentItem) {
     setActionError("");
     setActionMessage("");
-    const nextStatus = item.status === "todo" ? "done" : "todo";
+    const current = normalizeAssignmentStatus(item.status);
+    const nextStatus = current === "done" ? "todo" : "done";
     const snapshot = assignments;
+    const itemKey = String(item._id);
 
     setAssignments((curr) =>
-      curr.map((x) => (x._id === item._id ? { ...x, status: nextStatus } : x))
+      curr.map((x) => (String(x._id) === itemKey ? { ...x, status: nextStatus } : x))
     );
 
     if (nextStatus === "done") {
-      setEnteringDoneIds((prev) => new Set(prev).add(item._id));
+      setEnteringDoneIds((prev) => new Set(prev).add(itemKey));
       window.setTimeout(() => {
         setEnteringDoneIds((prev) => {
           const next = new Set(prev);
-          next.delete(item._id);
+          next.delete(itemKey);
           return next;
         });
       }, 260);
       scrollFirstMarkDoneIntoView();
     }
 
-    const res = await fetch(`/api/assignments/${item._id}`, {
+    const res = await fetch(`/api/assignments/${encodeURIComponent(itemKey)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus })
+      body: JSON.stringify({ status: nextStatus }),
+      cache: "no-store"
     });
 
     if (res.ok) {
       try {
         const data = (await res.json()) as AssignmentItem;
         setAssignments((curr) =>
-          curr.map((x) => (x._id === item._id ? mergeAssignmentFromApi(x, data) : x))
+          curr.map((x) =>
+            String(x._id) === itemKey ? mergeAssignmentFromApi(x, data) : x
+          )
         );
       } catch {
         await loadData();
@@ -254,15 +265,20 @@ export default function AssignmentsPage() {
     setAssignments(snapshot);
     setEnteringDoneIds((prev) => {
       const next = new Set(prev);
-      next.delete(item._id);
+      next.delete(itemKey);
       return next;
     });
-    const payload = await res.json().catch(() => ({}));
-    setActionError(
-      typeof payload?.error === "string"
-        ? payload.error
-        : "Could not update assignment status."
-    );
+    const payload = await res.json().catch(() => ({})) as {
+      error?: string | { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
+    };
+    const err = payload?.error;
+    let message = "Could not update assignment status.";
+    if (typeof err === "string") {
+      message = err;
+    } else if (err && typeof err === "object" && Array.isArray(err.formErrors) && err.formErrors.length) {
+      message = err.formErrors.join("; ");
+    }
+    setActionError(message);
   }
 
   async function onDelete(id: string) {
@@ -457,8 +473,9 @@ export default function AssignmentsPage() {
       );
     }
 
+    const isDone = normalizeAssignmentStatus(a.status) === "done";
     const enterDone =
-      a.status === "done" && enteringDoneIds.has(a._id) ? " assignment-row-enter-done" : "";
+      isDone && enteringDoneIds.has(String(a._id)) ? " assignment-row-enter-done" : "";
     const completedClass = opts.completed ? " assignment-row-completed" : "";
     const rowClass =
       `list-item assignment-row${opts.overdue ? " list-item-overdue" : ""}${enterDone}${completedClass}`.trim();
@@ -499,26 +516,24 @@ export default function AssignmentsPage() {
           </div>
         </div>
         <div className="row-actions assignment-actions">
-          <span
-            className={a.status === "done" ? "badge badge-done" : "badge badge-todo"}
-          >
-            {a.status === "done" ? "Done" : "To do"}
+          <span className={isDone ? "badge badge-done" : "badge badge-todo"}>
+            {isDone ? "Done" : "To do"}
           </span>
-          {a.status === "todo" ? (
+          {isDone ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => toggleStatus(a)}
+            >
+              Reopen
+            </button>
+          ) : (
             <button
               type="button"
               className="btn btn-primary btn-sm"
               onClick={() => toggleStatus(a)}
             >
               Mark done
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => toggleStatus(a)}
-            >
-              Reopen
             </button>
           )}
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEdit(a)}>

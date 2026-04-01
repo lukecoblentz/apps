@@ -19,13 +19,20 @@ export type AssignmentItem = {
   classId?: { _id?: string; name?: string; color?: string };
 };
 
+/** Coerce API / DB values so UI toggles never get stuck (missing status breaks Mark done / Reopen). */
+export function normalizeAssignmentStatus(
+  s: AssignmentItem["status"] | undefined | null
+): "todo" | "done" {
+  return s === "done" ? "done" : "todo";
+}
+
 export function partitionAssignments(assignments: AssignmentItem[]) {
   const now = Date.now();
   const done: AssignmentItem[] = [];
   const overdue: AssignmentItem[] = [];
   const upcoming: AssignmentItem[] = [];
   for (const a of assignments) {
-    if (a.status === "done") {
+    if (normalizeAssignmentStatus(a.status) === "done") {
       done.push(a);
       continue;
     }
@@ -68,6 +75,7 @@ export function mergeAssignmentFromApi(
   return {
     ...prev,
     ...api,
+    status: normalizeAssignmentStatus(api.status ?? prev.status),
     classId: api.classId ?? prev.classId
   };
 }
