@@ -15,35 +15,46 @@
 - `README.md` at repo root (`apps/README.md`) may be deleted locally — check `git status` before assuming a clean tree.
 
 ## Current Status (working)
-- Auth works (register/login) locally and on production.
-- Classes + assignments CRUD works.
-- Reminder cron route exists at `/api/cron/reminders`.
-- Reminder dedupe works via `SentReminder` model.
-- Resend is configured for testing with `Study Tracker <onboarding@resend.dev>`.
-- Canvas sync MVP: manual Canvas base URL + token, **Sync now** (`/api/canvas/sync`).
-- **Google Calendar:** OAuth (`/api/google/connect`, `/api/google/callback`); scopes include `calendar.events` + `calendar.readonly` (list); Settings calendar dropdown + `GET /api/google/calendars`; push/update one or all; optional `googleAutoSync`; `src/lib/google-sync.ts`, `src/lib/google-calendar.ts`.
-- **Microsoft Outlook:** OAuth (`/api/microsoft/connect`, `/api/microsoft/callback`); Graph scope uses `https://graph.microsoft.com/Calendars.ReadWrite`; push/update one or all; optional `msAutoSync`; `src/lib/microsoft-oauth.ts`, `src/lib/microsoft-sync.ts`.
+- Auth: register/login; **forgot password** (`/forgot-password`, `POST /api/auth/forgot-password`) and **reset** (`/reset-password?token=…`, `POST /api/auth/reset-password`). Uses Resend + SHA-256 hashed token on `User` (`passwordResetTokenHash`, `passwordResetExpiresAt`, 1h TTL). **Dev (`npm run dev`):** if email fails (no `RESEND_API_KEY`), reset URL is printed in the terminal and token is kept; production still needs Resend.
+- Classes + assignments CRUD; **deleting a class** deletes all assignments for that class first (`DELETE /api/classes/[id]`); UI confirm warns.
+- **Assignment model:** `priority`: `low` | `normal` | `high` (default `normal`); Canvas-created rows omit it → Mongoose default.
+- Reminder cron at `/api/cron/reminders`; dedupe via `SentReminder`.
+- Canvas sync: base URL + token, **Sync now** (`/api/canvas/sync`).
+- **Google Calendar:** OAuth; `calendar.events` + `calendar.readonly`; Settings dropdown + `GET /api/google/calendars`; push one / push all; optional `googleAutoSync`.
+- **Microsoft Outlook:** OAuth; `Calendars.ReadWrite`; optional `msCalendarId` + `GET /api/microsoft/calendars`; push one / push all; optional `msAutoSync`.
+- **UI / theming:** System + light + dark via `data-theme` on `<html>`, toggle `ThemeToggle`, `localStorage` key `study-tracker-theme`, `beforeInteractive` script in `layout.tsx`. **`StudyTrackerLogo`** SVG in nav.
+- **Routes:** `/calendar` — month grid of assignments by local due date; chips link to `/assignments#assignment-{id}`. **`/assignments`:** sections **Overdue** → **Upcoming** → **Completed**; search + class filter; setup checklist when no classes or no assignments; sync explainer; skeleton while loading; priority on create/edit; **Mark done** primary on to-dos.
+- **Dashboard (`/`):** loading skeletons + error state if `/api/dashboard` fails (not a bare “Loading…” forever).
 
-## Recent Fixes
-- Fixed assignment create duplicate key issue on `(userId, externalId)`:
-  - manual assignments now get unique `externalId`
-  - assignment index uses partial filter on string `externalId`
-- Added better assignment create error handling in UI + API.
+## Recent Fixes (historical + ongoing)
+- Assignment create duplicate key on `(userId, externalId)`: unique manual `externalId`, partial index on string `externalId`.
+- Class delete used to orphan assignments; now `AssignmentModel.deleteMany` then class delete.
+- Forgot-password 503 on local dev without Resend: dev path logs reset URL and returns 200 with instructions.
 
 ## Important Files
+- `src/app/layout.tsx` — nav, `ThemeToggle`, `StudyTrackerLogo`, theme init `Script`
+- `src/app/globals.css` — design tokens, dark mode, calendar/assignments/dashboard/skeleton/setup-checklist styles
+- `src/components/ThemeToggle.tsx`, `src/components/StudyTrackerLogo.tsx`
+- `src/app/page.tsx` — dashboard (load states, skeletons)
+- `src/app/calendar/page.tsx`
+- `src/app/assignments/page.tsx` — partitioned lists, filters, checklist, priority
+- `src/app/login/page.tsx`, `src/app/forgot-password/page.tsx`, `src/app/reset-password/page.tsx`
 - `src/app/api/cron/reminders/route.ts`
+- `src/app/api/auth/forgot-password/route.ts`, `src/app/api/auth/reset-password/route.ts`
+- `src/lib/email.ts` — reminders + `sendPasswordResetEmail`
+- `src/lib/password-reset-token.ts`
 - `src/models/SentReminder.ts`
-- `src/lib/email.ts`
 - `src/app/api/settings/route.ts`
 - `src/app/settings/page.tsx`
-- `src/app/api/google/connect/route.ts`, `src/app/api/google/callback/route.ts`, `src/app/api/google/calendars/route.ts`, `src/app/api/google/push/route.ts`, `src/app/api/google/push-all/route.ts`
-- `src/app/api/microsoft/connect/route.ts`, `src/app/api/microsoft/callback/route.ts`, `src/app/api/microsoft/calendars/route.ts`, `src/app/api/microsoft/push/route.ts`, `src/app/api/microsoft/push-all/route.ts`
-- `src/lib/google-calendar.ts`, `src/lib/google-oauth.ts`, `src/lib/google-sync.ts`
-- `src/lib/microsoft-oauth.ts`, `src/lib/microsoft-sync.ts`
-- `src/app/assignments/page.tsx`
-- `src/models/Assignment.ts` (`googleEventId`, `msEventId`)
-- `src/models/User.ts` (OAuth tokens + `googleCalendarId`, `msCalendarId`, `googleAutoSync`, `msAutoSync`)
-- `middleware.ts`
+- `src/app/api/google/connect/route.ts`, `callback`, `calendars`, `push`, `push-all`
+- `src/app/api/microsoft/connect`, `callback`, `calendars`, `push`, `push-all`
+- `src/lib/google-calendar.ts`, `google-oauth.ts`, `google-sync.ts`
+- `src/lib/microsoft-oauth.ts`, `microsoft-sync.ts`
+- `src/app/api/classes/[id]/route.ts` — DELETE cascades assignments
+- `src/lib/validators/assignment.ts`, `assignment-patch.ts`
+- `src/models/Assignment.ts` — `googleEventId`, `msEventId`, `priority`
+- `src/models/User.ts` — OAuth, calendars, auto-sync, **password reset** fields
+- `middleware.ts` — protected routes include `/calendar` (login/register/forgot/reset **not** listed → public)
 - `vercel.json`
 
 ## Vercel Cron (`vercel.json`) — do not change casually
@@ -61,8 +72,9 @@
   - `MONGODB_URI`
   - `NEXTAUTH_URL` — must match the site origin users open (e.g. `http://localhost:3000` local, `https://study-tracker-neon.vercel.app` prod). **Vercel:** set per environment; redeploy after changes.
   - `NEXTAUTH_SECRET`
-- **Email reminders (production):**
+- **Email reminders + password reset:**
   - `RESEND_API_KEY`, `EMAIL_FROM`, `CRON_SECRET`
+  - Forgot/reset emails use the same Resend config; `NEXTAUTH_URL` must match the site for reset links.
 - **Google Calendar (required to use Connect Google / push):**
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
   - Optional: `GOOGLE_REDIRECT_URI` — defaults to `${NEXTAUTH_URL}/api/google/callback`
@@ -79,13 +91,14 @@
   - `Authorization: Bearer <CRON_SECRET>`
 
 ## Known Issues / Follow-ups
-- Reminder timing is **UTC** and follows `vercel.json` — see **Vercel Cron (`vercel.json`) — do not change casually** above before editing.
-- Outlook **calendar picker:** `msCalendarId` on user, Settings dropdown + `GET /api/microsoft/calendars`, new events use `/me/calendars/{id}/events` when set; updates still `PATCH /me/events/{id}`.
-- Google **calendar picker:** `googleCalendarId` (default `primary`), Settings dropdown + `GET /api/google/calendars` (writable calendars only); connect flow requests `calendar.readonly` in addition to `calendar.events` — **existing users must Reconnect Google** once so the token includes the list scope.
+- Reminder timing is **UTC** and follows `vercel.json` — see **Vercel Cron** section before editing.
+- Google users who connected **before** `calendar.readonly` was added should **Reconnect Google** once for calendar list in Settings.
 - Google/Microsoft **auto-sync** is best-effort; assignment save still succeeds if calendar API fails.
+- **Not built (backlog ideas):** recurring assignments, file attachments, subtasks, estimated time, bulk actions, demo seed data, two-way calendar sync.
 
 ## Next Recommended Task
-- Optional: restore **hourly** reminder cron (`0 * * * *`) if product should match “remind X hours before” more closely — confirm Vercel plan limits first.
+- Optional: **hourly** reminder cron (`0 * * * *`) — confirm Vercel plan limits first.
+- Optional: small fields **estimated minutes** and/or **single link URL** per assignment (lighter than full attachments).
 
 ---
 
@@ -235,3 +248,27 @@
 
 ### Next Task
 - Optional: hourly reminder cron (see handoff).
+
+### Date
+- 2026-03-31
+
+### Done (consolidated — later sessions)
+- **Calendar page:** `/calendar` in nav + `middleware`; month grid by local due date; chips link to `/assignments#assignment-{id}`; assignments list `id` anchors + hash scroll.
+- **Class delete cascade:** `DELETE /api/classes/[id]` runs `AssignmentModel.deleteMany` then deletes class; confirm dialog mentions assignments removed.
+- **Forgot / reset password:** `passwordResetTokenHash`, `passwordResetExpiresAt` on `User`; `password-reset-token.ts`; `sendPasswordResetEmail`; `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`; pages `/forgot-password`, `/reset-password`; login “Forgot password?” + post-reset message. **Dev:** if Resend missing, log full reset URL in terminal, keep token (production still 503 + clear token on send failure).
+- **Theming + logo:** `globals.css` light/dark tokens; system via `prefers-color-scheme` when no `data-theme`; `ThemeToggle` + `localStorage` `study-tracker-theme`; `beforeInteractive` script in `layout`; `StudyTrackerLogo` SVG in nav.
+- **Assignments:** Overdue → Upcoming → Completed sections; search + class filter + clear; setup checklist when `classes.length === 0 || assignments.length === 0`; sync explainer; skeleton while `dataLoading`; empty visual; `priority` on `Assignment` + validators + create/edit UI + High/Low badges; **Mark done** primary for to-dos; `banner-success` for added assignment + board push messages.
+- **Dashboard:** load states loading/ready/error; skeleton stats + task rows; error banner if fetch fails.
+- **README:** Resend / forgot-password / dev reset URL note.
+
+### Current Status
+- See **Current Status (working)** at top of this doc; backlog under **Known Issues / Follow-ups**.
+
+### Env / Deploy Notes
+- Terminal reset link only with **`npm run dev`** (`NODE_ENV=development`). `npm run build && start` needs Resend for email.
+
+### Known Issues
+- Align with **Known Issues / Follow-ups** (UTC cron, reconnect Google for list scope, auto-sync best-effort, unbuilt: recurring/attachments/subtasks/bulk/demo).
+
+### Next Task
+- Optional: hourly cron; or **estimated minutes** / **single link** per assignment.

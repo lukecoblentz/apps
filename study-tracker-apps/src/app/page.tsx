@@ -35,15 +35,28 @@ function formatDue(d: string) {
 
 type TabKey = "today" | "overdue" | "week" | "done";
 
+type LoadState = "loading" | "ready" | "error";
+
 export default function HomePage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [tab, setTab] = useState<TabKey>("today");
 
   useEffect(() => {
     async function loadDashboard() {
-      const res = await fetch("/api/dashboard", { cache: "no-store" });
-      if (res.ok) {
+      setLoadState("loading");
+      try {
+        const res = await fetch("/api/dashboard", { cache: "no-store" });
+        if (!res.ok) {
+          setLoadState("error");
+          setData(null);
+          return;
+        }
         setData(await res.json());
+        setLoadState("ready");
+      } catch {
+        setLoadState("error");
+        setData(null);
       }
     }
     void loadDashboard();
@@ -96,19 +109,37 @@ export default function HomePage() {
         <div className="stat-grid">
           <article className="stat-card stat-today">
             <div className="stat-label">Due today</div>
-            <div className="stat-value">{counts.dueToday}</div>
+            <div className="stat-value">
+              {loadState === "loading" ? (
+                <span className="skeleton-inline skeleton-inline-stat" aria-hidden />
+              ) : (
+                counts.dueToday
+              )}
+            </div>
           </article>
           <article className="stat-card stat-overdue">
             <div className="stat-label">Overdue</div>
-            <div className="stat-value">{counts.overdue}</div>
+            <div className="stat-value">
+              {loadState === "loading" ? (
+                <span className="skeleton-inline skeleton-inline-stat" aria-hidden />
+              ) : (
+                counts.overdue
+              )}
+            </div>
           </article>
           <article className="stat-card">
             <div className="stat-label">Next 7 days</div>
-            <div className="stat-value">{counts.thisWeek}</div>
+            <div className="stat-value">
+              {loadState === "loading" ? (
+                <span className="skeleton-inline skeleton-inline-stat" aria-hidden />
+              ) : (
+                counts.thisWeek
+              )}
+            </div>
           </article>
         </div>
 
-        <section className="card">
+        <section className="card card-animate">
           <div className="card-header">
             <div>
               <h2>Tasks</h2>
@@ -130,6 +161,7 @@ export default function HomePage() {
                 type="button"
                 role="tab"
                 aria-selected={tab === key}
+                disabled={loadState === "loading"}
                 className={`tab ${tab === key ? "tab-active" : ""}`}
                 onClick={() => setTab(key)}
               >
@@ -138,7 +170,20 @@ export default function HomePage() {
             ))}
           </div>
 
-          {list.length ? (
+          {loadState === "error" ? (
+            <p className="alert-error">
+              Could not load the dashboard. Check your connection and refresh the page.
+            </p>
+          ) : loadState === "loading" ? (
+            <ul className="skeleton-list dashboard-skeleton" aria-busy aria-label="Loading tasks">
+              {[0, 1, 2, 3].map((i) => (
+                <li key={i} className="skeleton-row">
+                  <div className="skeleton-line skeleton-line-lg" />
+                  <div className="skeleton-line skeleton-line-sm" />
+                </li>
+              ))}
+            </ul>
+          ) : list.length ? (
             <ul className="list-plain">
               {list.map((item) => (
                 <li key={item._id} className="list-item">
@@ -184,9 +229,7 @@ export default function HomePage() {
             </ul>
           ) : (
             <p className="empty-hint">
-              {data == null
-                ? "Loading…"
-                : "Nothing in this view. Add assignments or try another tab."}
+              Nothing in this view. Add assignments or try another tab.
             </p>
           )}
         </section>

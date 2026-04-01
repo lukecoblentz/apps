@@ -1,4 +1,5 @@
 import { ClassModel } from "@/models/Class";
+import { inferPriorityFromTitle } from "@/lib/assignment-priority";
 import { AssignmentModel } from "@/models/Assignment";
 
 const PALETTE = [
@@ -149,6 +150,7 @@ export async function syncCanvasForUser(
         dueAt,
         description: "",
         status: "todo",
+        priority: inferPriorityFromTitle(title),
         source: "canvas",
         externalId: extId
       });

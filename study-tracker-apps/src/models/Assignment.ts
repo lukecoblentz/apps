@@ -11,6 +11,11 @@ const assignmentSchema = new Schema(
       enum: ["todo", "done"],
       default: "todo"
     },
+    priority: {
+      type: String,
+      enum: ["low", "normal", "high"],
+      default: "normal"
+    },
     source: {
       type: String,
       enum: ["manual", "canvas"],

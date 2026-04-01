@@ -5,7 +5,8 @@ export const assignmentSchema = z.object({
   classId: z.string().min(1, "Class is required"),
   dueAt: z.string().datetime("Use a valid date"),
   description: z.string().max(500).optional().or(z.literal("")),
-  status: z.enum(["todo", "done"]).default("todo")
+  status: z.enum(["todo", "done"]).default("todo"),
+  priority: z.enum(["low", "normal", "high"]).default("normal")
 });
 
 export type AssignmentInput = z.infer<typeof assignmentSchema>;

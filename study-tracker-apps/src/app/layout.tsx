@@ -54,6 +54,7 @@ export default async function RootLayout({
                       <NavLink href="/assignments">Assignments</NavLink>
                       <NavLink href="/calendar">Calendar</NavLink>
                       <NavLink href="/settings">Settings</NavLink>
+                      <NavLink href="/invite">Invite</NavLink>
                     </>
                   ) : null}
                 </div>

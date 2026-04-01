@@ -7,11 +7,14 @@ export const config = {
     "/assignments",
     "/calendar",
     "/settings",
+    "/invite",
     "/api/classes/:path*",
     "/api/assignments/:path*",
     "/api/dashboard/:path*",
     "/api/settings/:path*",
+    "/api/user/:path*",
     "/api/canvas/:path*",
-    "/api/google/:path*"
+    "/api/google/:path*",
+    "/api/microsoft/:path*"
   ]
 };

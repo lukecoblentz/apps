@@ -1,14 +1,28 @@
 import { hash } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+import type { Types } from "mongoose";
 import { z } from "zod";
+import { generateInviteCode } from "@/lib/invite-code";
 import { connectToDatabase } from "@/lib/mongodb";
 import { UserModel } from "@/models/User";
 
 const registerSchema = z.object({
   name: z.string().min(1).max(60),
   email: z.string().email(),
-  password: z.string().min(8).max(128)
+  password: z.string().min(8).max(128),
+  inviteCode: z.string().trim().min(1).max(64).optional()
 });
+
+const INVITE_ATTEMPTS = 8;
+
+async function allocateInviteCode(): Promise<string> {
+  for (let i = 0; i < INVITE_ATTEMPTS; i++) {
+    const code = generateInviteCode();
+    const taken = await UserModel.exists({ inviteCode: code });
+    if (!taken) return code;
+  }
+  throw new Error("Could not allocate invite code");
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,10 +48,23 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await hash(parsed.data.password, 10);
+    const newInviteCode = await allocateInviteCode();
+
+    const rawInvite = parsed.data.inviteCode?.trim();
+    const referrerDoc = rawInvite
+      ? await UserModel.findOne({ inviteCode: rawInvite }).select("_id").lean()
+      : null;
+    const referrerId =
+      referrerDoc && typeof referrerDoc === "object" && "_id" in referrerDoc
+        ? (referrerDoc._id as Types.ObjectId)
+        : undefined;
+
     const user = await UserModel.create({
       name: parsed.data.name,
       email,
-      passwordHash
+      passwordHash,
+      inviteCode: newInviteCode,
+      ...(referrerId ? { invitedByUserId: referrerId } : {})
     });
 
     return NextResponse.json(

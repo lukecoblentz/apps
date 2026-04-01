@@ -1,4 +1,4 @@
-import { Schema, model, models } from "mongoose";
+import { Schema, model, models, Types } from "mongoose";
 
 const userSchema = new Schema(
   {
@@ -35,9 +35,22 @@ const userSchema = new Schema(
     reminderMinutesBefore: {
       type: [Number],
       default: [1440, 120]
-    }
+    },
+    /** Shareable code for /register?invite=…; generated at signup or on first invite fetch. */
+    inviteCode: { type: String, default: "", trim: true },
+    invitedByUserId: { type: Types.ObjectId, ref: "User", default: null }
   },
   { timestamps: true }
+);
+
+userSchema.index(
+  { inviteCode: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      inviteCode: { $type: "string", $gt: "" }
+    }
+  }
 );
 
 export const UserModel = models.User || model("User", userSchema);

@@ -37,6 +37,7 @@ export async function PATCH(
   if (parsed.data.status !== undefined) update.status = parsed.data.status;
   if (parsed.data.classId !== undefined) update.classId = parsed.data.classId;
   if (parsed.data.dueAt !== undefined) update.dueAt = new Date(parsed.data.dueAt);
+  if (parsed.data.priority !== undefined) update.priority = parsed.data.priority;
 
   const updated = await AssignmentModel.findOneAndUpdate(
     { _id: params.id, userId },

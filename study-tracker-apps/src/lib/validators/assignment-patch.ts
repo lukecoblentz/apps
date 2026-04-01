@@ -6,7 +6,8 @@ export const assignmentPatchSchema = z
     description: z.string().max(500).optional(),
     status: z.enum(["todo", "done"]).optional(),
     classId: z.string().min(1).optional(),
-    dueAt: z.string().datetime().optional()
+    dueAt: z.string().datetime().optional(),
+    priority: z.enum(["low", "normal", "high"]).optional()
   })
   .strict()
   .refine((d) => Object.keys(d).length > 0, {
