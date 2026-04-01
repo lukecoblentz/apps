@@ -29,6 +29,10 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [canvasLastSyncAt, setCanvasLastSyncAt] = useState<string | null>(null);
+  const [canvasLastSyncError, setCanvasLastSyncError] = useState("");
+  const [dailyGoalMinutes, setDailyGoalMinutes] = useState(120);
+  const [weeklyGoalMinutes, setWeeklyGoalMinutes] = useState(600);
   const [googleConnecting, setGoogleConnecting] = useState(false);
   const [msConnecting, setMsConnecting] = useState(false);
   const searchParams = useSearchParams();
@@ -53,6 +57,18 @@ export default function SettingsPage() {
     setMsAutoSync(Boolean(data.msAutoSync));
     const mins: number[] = data.reminderMinutesBefore || [1440, 120];
     setReminderSet(new Set(mins));
+    setCanvasLastSyncAt(
+      typeof data.canvasLastSyncAt === "string" ? data.canvasLastSyncAt : null
+    );
+    setCanvasLastSyncError(
+      typeof data.canvasLastSyncError === "string" ? data.canvasLastSyncError : ""
+    );
+    setDailyGoalMinutes(
+      typeof data.dailyGoalMinutes === "number" ? data.dailyGoalMinutes : 120
+    );
+    setWeeklyGoalMinutes(
+      typeof data.weeklyGoalMinutes === "number" ? data.weeklyGoalMinutes : 600
+    );
     setLoading(false);
   }
 
@@ -336,12 +352,30 @@ export default function SettingsPage() {
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}));
       setError(payload?.error || "Sync failed.");
+      await load();
       return;
     }
     const payload = await res.json();
     setMessage(
       `Synced: ${payload.assignmentsTouched ?? 0} planner assignments touched, ${payload.classesCreated ?? 0} new classes.`
     );
+    await load();
+  }
+
+  async function saveGoals(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dailyGoalMinutes, weeklyGoalMinutes })
+    });
+    if (!res.ok) {
+      setError("Could not save study goals.");
+      return;
+    }
+    setMessage("Study goals saved.");
   }
 
   if (loading) {
@@ -362,6 +396,40 @@ export default function SettingsPage() {
       <div className="grid">
         {message ? <p className="banner-success">{message}</p> : null}
         {error ? <p className="alert-error">{error}</p> : null}
+
+        <section className="card settings-section">
+          <h2>Study goals</h2>
+          <p className="card-subtitle">
+            Used for progress rings on the dashboard and analytics. Adjust anytime.
+          </p>
+          <form className="form-stack" onSubmit={saveGoals} style={{ marginTop: 16 }}>
+            <div className="field">
+              <label htmlFor="daily-goal">Daily goal (minutes)</label>
+              <input
+                id="daily-goal"
+                type="number"
+                min={5}
+                max={1440}
+                value={dailyGoalMinutes}
+                onChange={(e) => setDailyGoalMinutes(Number(e.target.value) || 5)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="weekly-goal">Weekly goal (minutes)</label>
+              <input
+                id="weekly-goal"
+                type="number"
+                min={30}
+                max={10080}
+                value={weeklyGoalMinutes}
+                onChange={(e) => setWeeklyGoalMinutes(Number(e.target.value) || 30)}
+              />
+            </div>
+            <button type="submit" className="btn btn-primary">
+              Save goals
+            </button>
+          </form>
+        </section>
 
         <section className="card settings-section">
           <h2>Reminders</h2>
@@ -397,10 +465,28 @@ export default function SettingsPage() {
             Tracker.
           </p>
           <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: "0.875rem" }}>
-            New assignments your instructor adds in Canvas are not pulled automatically. Use{" "}
-            <strong>Sync now</strong> when you want to refresh; the API call usually finishes in a
-            few seconds, and new items appear as soon as Canvas exposes them in the planner.
+            While this tab is open, the app refreshes Canvas about every four hours. The server also
+            syncs on the same schedule, so new instructor assignments typically appear within a few
+            hours without you doing anything. Use <strong>Sync now</strong> for immediate updates.
           </p>
+          {canvasLastSyncAt ? (
+            <p className="sync-meta muted" style={{ marginTop: 10, marginBottom: 0 }}>
+              Last successful sync:{" "}
+              {new Date(canvasLastSyncAt).toLocaleString(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short"
+              })}
+            </p>
+          ) : hasCanvasToken && canvasBaseUrl.trim() ? (
+            <p className="sync-meta muted" style={{ marginTop: 10, marginBottom: 0 }}>
+              Last successful sync: not yet — run <strong>Sync now</strong> once.
+            </p>
+          ) : null}
+          {canvasLastSyncError ? (
+            <p className="canvas-sync-error" role="status">
+              Canvas sync issue: {canvasLastSyncError}
+            </p>
+          ) : null}
           <form className="form-stack" onSubmit={saveCanvas} style={{ marginTop: 16 }}>
             <div className="field">
               <label htmlFor="canvas-url">Canvas base URL</label>

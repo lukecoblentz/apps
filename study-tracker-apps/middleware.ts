@@ -6,6 +6,8 @@ export const config = {
     "/classes",
     "/assignments",
     "/calendar",
+    "/analytics",
+    "/subjects",
     "/settings",
     "/invite",
     "/api/classes/:path*",
@@ -15,6 +17,9 @@ export const config = {
     "/api/user/:path*",
     "/api/canvas/:path*",
     "/api/google/:path*",
-    "/api/microsoft/:path*"
+    "/api/microsoft/:path*",
+    "/api/subjects/:path*",
+    "/api/study-sessions/:path*",
+    "/api/analytics/:path*"
   ]
 };

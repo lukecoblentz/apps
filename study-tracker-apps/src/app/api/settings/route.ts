@@ -18,7 +18,9 @@ const patchSchema = z
     googleDisconnect: z.boolean().optional(),
     msCalendarId: z.string().max(400).optional(),
     msAutoSync: z.boolean().optional(),
-    msDisconnect: z.boolean().optional()
+    msDisconnect: z.boolean().optional(),
+    dailyGoalMinutes: z.number().int().min(5).max(1440).optional(),
+    weeklyGoalMinutes: z.number().int().min(30).max(10080).optional()
   })
   .strict();
 
@@ -38,6 +40,10 @@ export async function GET() {
     reminderMinutesBefore?: number[];
     canvasBaseUrl?: string;
     canvasAccessToken?: string;
+    canvasLastSyncAt?: Date | null;
+    canvasLastSyncError?: string;
+    dailyGoalMinutes?: number;
+    weeklyGoalMinutes?: number;
     googleAccessToken?: string;
     googleRefreshToken?: string;
     googleCalendarId?: string;
@@ -58,7 +64,13 @@ export async function GET() {
     googleAutoSync: Boolean(user.googleAutoSync),
     hasMicrosoftToken: Boolean(user.msAccessToken || user.msRefreshToken),
     msCalendarId: user.msCalendarId?.trim() || "",
-    msAutoSync: Boolean(user.msAutoSync)
+    msAutoSync: Boolean(user.msAutoSync),
+    dailyGoalMinutes: user.dailyGoalMinutes ?? 120,
+    weeklyGoalMinutes: user.weeklyGoalMinutes ?? 600,
+    canvasLastSyncAt: user.canvasLastSyncAt
+      ? new Date(user.canvasLastSyncAt).toISOString()
+      : null,
+    canvasLastSyncError: user.canvasLastSyncError?.trim() || ""
   });
 }
 
@@ -136,6 +148,12 @@ export async function PATCH(req: NextRequest) {
     $set.msRefreshToken = "";
     $set.msTokenExpiresAt = null;
     $set.msCalendarId = "";
+  }
+  if (parsed.data.dailyGoalMinutes !== undefined) {
+    $set.dailyGoalMinutes = parsed.data.dailyGoalMinutes;
+  }
+  if (parsed.data.weeklyGoalMinutes !== undefined) {
+    $set.weeklyGoalMinutes = parsed.data.weeklyGoalMinutes;
   }
 
   if (Object.keys($set).length === 0) {

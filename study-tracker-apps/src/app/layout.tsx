@@ -22,7 +22,26 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "Study Tracker",
-  description: "Track classes and assignments with MongoDB"
+  description:
+    "Habit-building study timer, streaks, analytics, and assignment tracking for students.",
+  applicationName: "Study Tracker",
+  appleWebApp: {
+    capable: true,
+    title: "Study Tracker",
+    statusBarStyle: "default"
+  },
+  formatDetection: {
+    telephone: false
+  }
+};
+
+export const viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#4338ca" },
+    { media: "(prefers-color-scheme: dark)", color: "#141922" }
+  ],
+  width: "device-width",
+  initialScale: 1
 };
 
 export default async function RootLayout({
@@ -50,6 +69,8 @@ export default async function RootLayout({
                   {session?.user ? (
                     <>
                       <NavLink href="/">Dashboard</NavLink>
+                      <NavLink href="/analytics">Analytics</NavLink>
+                      <NavLink href="/subjects">Subjects</NavLink>
                       <NavLink href="/classes">Classes</NavLink>
                       <NavLink href="/assignments">Assignments</NavLink>
                       <NavLink href="/calendar">Calendar</NavLink>
@@ -77,6 +98,22 @@ export default async function RootLayout({
               </div>
             </header>
             <main className="main">{children}</main>
+            {session?.user ? (
+              <footer className="app-footer">
+                <div className="app-footer-inner">
+                  <p className="app-footer-support">
+                    Enjoying Study Tracker?{" "}
+                    <a
+                      href="https://cash.app/$WatchCat7589"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Buy Me a Coffee: $WatchCat7589
+                    </a>
+                  </p>
+                </div>
+              </footer>
+            ) : null}
           </div>
         </AuthProvider>
       </body>

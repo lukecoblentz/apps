@@ -17,14 +17,14 @@
 ## Current Status (working)
 - Auth: register/login; **forgot password** (`/forgot-password`, `POST /api/auth/forgot-password`) and **reset** (`/reset-password?token=…`, `POST /api/auth/reset-password`). Uses Resend + SHA-256 hashed token on `User` (`passwordResetTokenHash`, `passwordResetExpiresAt`, 1h TTL). **Dev (`npm run dev`):** if email fails (no `RESEND_API_KEY`), reset URL is printed in the terminal and token is kept; production still needs Resend.
 - Classes + assignments CRUD; **deleting a class** deletes all assignments for that class first (`DELETE /api/classes/[id]`); UI confirm warns.
-- **Assignment model:** `priority`: `low` | `normal` | `high` (default `normal`); Canvas-created rows omit it → Mongoose default.
+- **Assignment model:** `priority`: `low` | `normal` | `high` (default `normal`); **UI labels** “Medium” for `normal`. **Default priority from title** on create (manual + new Canvas rows): `inferPriorityFromTitle` in `src/lib/assignment-priority.ts` (exams/papers → high; labs/assignments → medium; discussion/read/misc → low).
 - Reminder cron at `/api/cron/reminders`; dedupe via `SentReminder`.
-- Canvas sync: base URL + token, **Sync now** (`/api/canvas/sync`).
-- **Google Calendar:** OAuth; `calendar.events` + `calendar.readonly`; Settings dropdown + `GET /api/google/calendars`; push one / push all; optional `googleAutoSync`.
+- Canvas sync: base URL + token, **Sync now** (`POST /api/canvas/sync`). **Not automatic** — no background poll; new instructor assignments appear after the user runs sync (usually seconds). Settings explains this.
+- **Google Calendar:** OAuth; `calendar.events` + `calendar.readonly`; Settings dropdown + `GET /api/google/calendars`; push one / push all; optional `googleAutoSync`. **Event shape:** end-of-day deadlines (11:58–11:59 PM in `CALENDAR_DEFAULT_TIMEZONE`) sync as **all-day** events with `Exact deadline:` in description; others stay 1-hour timed. **`src/lib/calendar-due-display.ts`** + **`google-calendar.ts`**: PATCH failure → DELETE + POST recreate; `parseGoogleCalendarApiError`; invalid TZ falls back to `America/New_York`.
 - **Microsoft Outlook:** OAuth; `Calendars.ReadWrite`; optional `msCalendarId` + `GET /api/microsoft/calendars`; push one / push all; optional `msAutoSync`.
 - **UI / theming:** System + light + dark via `data-theme` on `<html>`, toggle `ThemeToggle`, `localStorage` key `study-tracker-theme`, `beforeInteractive` script in `layout.tsx`. **`StudyTrackerLogo`** SVG in nav.
-- **Routes:** `/calendar` — month grid of assignments by local due date; chips link to `/assignments#assignment-{id}`. **`/assignments`:** sections **Overdue** → **Upcoming** → **Completed**; search + class filter; setup checklist when no classes or no assignments; sync explainer; skeleton while loading; priority on create/edit; **Mark done** primary on to-dos.
-- **Dashboard (`/`):** loading skeletons + error state if `/api/dashboard` fails (not a bare “Loading…” forever).
+- **Routes:** `/calendar` — month grid of assignments by local due date; chips link to `/assignments#assignment-{id}`. **`/assignments`:** sections **Overdue** → **Upcoming** → **Completed**; search + class filter; setup checklist; sync explainer; skeleton on first load only (`hasLoadedOnceRef`); optimistic **Mark done** + merge PATCH; completed rows **strikethrough + muted** (`.assignment-row-completed`). **`/invite`** — personal invite link + **`GET /api/user/invite`**; register with `?invite=` sets `invitedByUserId`. Nav **Invite**; **`User`**: `inviteCode`, `invitedByUserId`.
+- **Dashboard (`/`):** **`useSession`** waits for `authenticated` before fetching; **`fetchDashboardWithRetry`** (4 attempts, backoff) + `credentials: 'same-origin'` for cold start / transient failures. **`/api/dashboard`:** `export const dynamic = 'force-dynamic'`; try/catch 500. **“Due this week”** = to-dos with `dueAt` after end of **today** through **end of upcoming Sunday 11:59:59 PM** in `CALENDAR_DEFAULT_TIMEZONE` (`endOfUpcomingSundayNight` in `calendar-due-display.ts`), not rolling 7 days.
 
 ## Recent Fixes (historical + ongoing)
 - Assignment create duplicate key on `(userId, externalId)`: unique manual `externalId`, partial index on string `externalId`.
@@ -35,7 +35,13 @@
 - `src/app/layout.tsx` — nav, `ThemeToggle`, `StudyTrackerLogo`, theme init `Script`
 - `src/app/globals.css` — design tokens, dark mode, calendar/assignments/dashboard/skeleton/setup-checklist styles
 - `src/components/ThemeToggle.tsx`, `src/components/StudyTrackerLogo.tsx`
-- `src/app/page.tsx` — dashboard (load states, skeletons)
+- `src/app/page.tsx` — dashboard (`useSession`, `fetchDashboardWithRetry`, tab labels)
+- `src/lib/fetch-dashboard.ts` — dashboard fetch with retries
+- `src/app/api/dashboard/route.ts` — week window (`endOfUpcomingSundayNight`), `dynamic = 'force-dynamic'`, try/catch
+- `src/lib/assignment-priority.ts`, `src/lib/assignments-list.ts`, `src/lib/assignments-datetime.ts`, `src/lib/assignments-scroll.ts`
+- `src/lib/calendar-due-display.ts` — TZ helpers, week end Sunday, end-of-day for calendar sync
+- `src/lib/invite-code.ts`, `src/app/api/user/invite/route.ts`, `src/app/register/RegisterForm.tsx`
+- `src/app/invite/page.tsx`
 - `src/app/calendar/page.tsx`
 - `src/app/assignments/page.tsx` — partitioned lists, filters, checklist, priority
 - `src/app/login/page.tsx`, `src/app/forgot-password/page.tsx`, `src/app/reset-password/page.tsx`
@@ -48,13 +54,13 @@
 - `src/app/settings/page.tsx`
 - `src/app/api/google/connect/route.ts`, `callback`, `calendars`, `push`, `push-all`
 - `src/app/api/microsoft/connect`, `callback`, `calendars`, `push`, `push-all`
-- `src/lib/google-calendar.ts`, `google-oauth.ts`, `google-sync.ts`
+- `src/lib/google-calendar.ts` (upsert + PATCH fallback + errors), `google-oauth.ts`, `google-sync.ts`
 - `src/lib/microsoft-oauth.ts`, `microsoft-sync.ts`
 - `src/app/api/classes/[id]/route.ts` — DELETE cascades assignments
 - `src/lib/validators/assignment.ts`, `assignment-patch.ts`
 - `src/models/Assignment.ts` — `googleEventId`, `msEventId`, `priority`
-- `src/models/User.ts` — OAuth, calendars, auto-sync, **password reset** fields
-- `middleware.ts` — protected routes include `/calendar` (login/register/forgot/reset **not** listed → public)
+- `src/models/User.ts` — OAuth, calendars, auto-sync, **password reset** fields, **`inviteCode`**, **`invitedByUserId`**
+- `middleware.ts` — protected routes include `/calendar`, `/invite`, `/api/user/:path*`, `/api/microsoft/:path*` (login/register/forgot/reset **not** listed → public)
 - `vercel.json`
 
 ## Vercel Cron (`vercel.json`) — do not change casually
@@ -82,6 +88,7 @@
   - `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` — secret must be the **Value**, not Secret ID
   - Optional: `MICROSOFT_REDIRECT_URI` — defaults to `${NEXTAUTH_URL}/api/microsoft/callback`
 - **OAuth redirect gotcha:** Register in Google/Azure the exact callback URLs. If the browser uses `http://127.0.0.1:3000` but only `localhost` is registered, add both or use one consistently; optional explicit `MICROSOFT_REDIRECT_URI` / `GOOGLE_REDIRECT_URI` can lock the redirect.
+- **Calendar / dashboard timezone (optional):** `CALENDAR_DEFAULT_TIMEZONE` — IANA zone (e.g. `America/Los_Angeles`). Used for: Google/Outlook all-day cutoff, dashboard “through Sunday night” window, Microsoft all-day events. Defaults to `America/New_York` if unset or invalid. Documented in `.env.example`.
 
 ## Security Notes
 - Never commit secrets or `.env.local`.
@@ -252,7 +259,7 @@
 ### Date
 - 2026-03-31
 
-### Done (consolidated — later sessions)
+### Done (consolidated — history through 2026-03-31)
 - **Calendar page:** `/calendar` in nav + `middleware`; month grid by local due date; chips link to `/assignments#assignment-{id}`; assignments list `id` anchors + hash scroll.
 - **Class delete cascade:** `DELETE /api/classes/[id]` runs `AssignmentModel.deleteMany` then deletes class; confirm dialog mentions assignments removed.
 - **Forgot / reset password:** `passwordResetTokenHash`, `passwordResetExpiresAt` on `User`; `password-reset-token.ts`; `sendPasswordResetEmail`; `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`; pages `/forgot-password`, `/reset-password`; login “Forgot password?” + post-reset message. **Dev:** if Resend missing, log full reset URL in terminal, keep token (production still 503 + clear token on send failure).
@@ -260,15 +267,46 @@
 - **Assignments:** Overdue → Upcoming → Completed sections; search + class filter + clear; setup checklist when `classes.length === 0 || assignments.length === 0`; sync explainer; skeleton while `dataLoading`; empty visual; `priority` on `Assignment` + validators + create/edit UI + High/Low badges; **Mark done** primary for to-dos; `banner-success` for added assignment + board push messages.
 - **Dashboard:** load states loading/ready/error; skeleton stats + task rows; error banner if fetch fails.
 - **README:** Resend / forgot-password / dev reset URL note.
+- **Invite:** `User.inviteCode` (unique when non-empty) + `invitedByUserId`; new users get a code at signup; `GET /api/user/invite` (force-dynamic) backfills codes; `/invite` page + nav link; register accepts `?invite=` and `POST /api/auth/register` body `inviteCode`; middleware: `/invite`, `/api/user/:path*`.
+- **Assignments UX:** `assignments-list.ts` partition/filter/merge; optimistic mark-done + scroll to next “Mark done”; `hasLoadedOnceRef` avoids skeleton flash on refetch; edit save + push Google/Outlook merge IDs without full reload; optimistic delete with rollback; `NavLink` `prefetch`; card/page motion + `@media (hover: hover)` card hover; mobile nav horizontal scroll; “Medium” label for `normal` priority.
+- **Default priority:** `assignment-priority.ts` + create form auto-infers from title until user changes priority (`priorityTouchedRef`); Canvas **create** sets `priority` via `inferPriorityFromTitle` (`canvas-sync.ts`).
+- **Google Calendar display:** `calendar-due-display.ts` — end-of-day (23:58–23:59 in TZ) → all-day events + “Exact deadline:” in description; invalid `CALENDAR_DEFAULT_TIMEZONE` falls back to `America/New_York`; `google-calendar.ts` — `parseGoogleCalendarApiError`, PATCH 400/404/409/412 → DELETE + POST; Microsoft parity in `microsoft-sync.ts`.
+- **Google push-all:** ~80ms spacing between items; assignments UI shows first failure string in `actionError` when `failed > 0`.
+- **Dashboard “Due this week”:** Replaced rolling 7 days with **after today through end of upcoming Sunday 11:59:59 PM** in `CALENDAR_DEFAULT_TIMEZONE` (`endOfUpcomingSundayNight`, `endOfCalendarDayInTimeZone`, `isSundayYmd`); stat/tab labels updated.
+- **Dashboard reliability:** `useSession` — fetch only when `authenticated`; `fetchDashboardWithRetry` (4 tries, exponential backoff); API `try/catch` + `dynamic = 'force-dynamic'` (fixes build static analysis noise).
+- **Completed assignments:** `.assignment-row-completed` — strikethrough title + muted meta in Completed section.
+- **Settings:** Canvas copy — sync is manual; timing expectations.
+- **`src/components/NavLink.tsx`:** explicit `prefetch`.
 
 ### Current Status
-- See **Current Status (working)** at top of this doc; backlog under **Known Issues / Follow-ups**.
+- See **Current Status (working)** at top of this doc; backlog under **Known Issues / Follow-ups**; env includes optional **`CALENDAR_DEFAULT_TIMEZONE`**.
 
 ### Env / Deploy Notes
 - Terminal reset link only with **`npm run dev`** (`NODE_ENV=development`). `npm run build && start` needs Resend for email.
+- Set **`CALENDAR_DEFAULT_TIMEZONE`** on Vercel if users are not in Eastern US (matches dashboard week boundary + calendar all-day heuristic).
 
 ### Known Issues
 - Align with **Known Issues / Follow-ups** (UTC cron, reconnect Google for list scope, auto-sync best-effort, unbuilt: recurring/attachments/subtasks/bulk/demo).
+- **“Due today”** / server `startOfToday` still use **server local midnight**, not `CALENDAR_DEFAULT_TIMEZONE` — full TZ alignment would be a follow-up.
 
 ### Next Task
-- Optional: hourly cron; or **estimated minutes** / **single link** per assignment.
+- Optional: hourly reminder cron; estimated minutes / link per assignment.
+
+### Date
+- 2026-03-31
+
+### Done
+- Habit-building features: focus timer (25/50/custom, ring, pause/resume, log session, chime + optional notification, completion state), streaks (current/longest from study sessions in `CALENDAR_DEFAULT_TIMEZONE`), goals (daily/weekly on User + progress UI), analytics page with Recharts weekly bar, insights, subject breakdown, recent sessions.
+- Subjects: `Subject` model, `/subjects` CRUD, sessions taggable; analytics filter by subject.
+- Canvas: server cron `GET /api/cron/canvas-sync` every 4 hours (`vercel.json`), POST `/api/canvas/sync` updates `canvasLastSyncAt` / `canvasLastSyncError`; client `useCanvasAutoSync` polls every 4h when logged in; Settings + Assignments show last sync and errors; manual vs Canvas badges on assignment rows.
+- PWA: `src/app/manifest.ts`, icons under `public/icons/`, `viewport` theme colors.
+- Footer support link (Cash App). Nav: Analytics, Subjects.
+
+### Current Status
+- Study sessions and goals persist in MongoDB. Theme already used `localStorage` (`study-tracker-theme`).
+
+### Env / Deploy Notes
+- Vercel Cron must include both reminder and canvas-sync jobs; `CRON_SECRET` required for cron routes in production.
+
+### Known Issues
+- Service worker / deep offline cache not implemented (installable PWA + manifest only).

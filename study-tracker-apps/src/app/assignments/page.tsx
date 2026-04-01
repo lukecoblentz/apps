@@ -43,15 +43,36 @@ export default function AssignmentsPage() {
   const [enteringDoneIds, setEnteringDoneIds] = useState(() => new Set<string>());
   const priorityTouchedRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
+  const [canvasLastSyncAt, setCanvasLastSyncAt] = useState<string | null>(null);
+  const [canvasSyncError, setCanvasSyncError] = useState("");
+  const [hasCanvasConfigured, setHasCanvasConfigured] = useState(false);
 
   async function loadData() {
     const showSkeleton = !hasLoadedOnceRef.current;
     if (showSkeleton) setDataLoading(true);
     try {
-      const [cRes, aRes] = await Promise.all([
+      const [cRes, aRes, setRes] = await Promise.all([
         fetch("/api/classes", { cache: "no-store" }),
-        fetch("/api/assignments", { cache: "no-store" })
+        fetch("/api/assignments", { cache: "no-store" }),
+        fetch("/api/settings", { cache: "no-store" })
       ]);
+      if (setRes.ok) {
+        const s = (await setRes.json()) as {
+          hasCanvasToken?: boolean;
+          canvasBaseUrl?: string;
+          canvasLastSyncAt?: string | null;
+          canvasLastSyncError?: string;
+        };
+        setHasCanvasConfigured(
+          Boolean(s.hasCanvasToken && (s.canvasBaseUrl || "").trim())
+        );
+        setCanvasLastSyncAt(
+          typeof s.canvasLastSyncAt === "string" ? s.canvasLastSyncAt : null
+        );
+        setCanvasSyncError(
+          typeof s.canvasLastSyncError === "string" ? s.canvasLastSyncError : ""
+        );
+      }
       if (cRes.ok) {
         const classData: ClassItem[] = await cRes.json();
         setClasses(classData);
@@ -460,10 +481,20 @@ export default function AssignmentsPage() {
                 <span className="badge badge-priority-low">Low</span>
               ) : null}
             </div>
-            <div className="list-item-meta">
-              {a.classId?.name ?? "Class"} · {formatDueShort(a.dueAt)}
-              {a.source === "canvas" ? " · Canvas" : ""}
-              {opts.overdue ? " · Overdue" : ""}
+            <div className="list-item-meta assignment-meta-line">
+              <span>
+                {a.classId?.name ?? "Class"} · {formatDueShort(a.dueAt)}
+                {opts.overdue ? " · Overdue" : ""}
+              </span>
+              {a.source === "canvas" ? (
+                <span className="badge badge-canvas" title="Synced from Canvas">
+                  Canvas
+                </span>
+              ) : (
+                <span className="badge badge-manual" title="Created in Study Tracker">
+                  Manual
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -534,6 +565,26 @@ export default function AssignmentsPage() {
           Outlook (one-way from Study Tracker).
         </p>
       </header>
+
+      {hasCanvasConfigured ? (
+        <div className="assignments-canvas-strip">
+          <span>
+            <strong>Canvas</strong>
+            {canvasLastSyncAt
+              ? ` · Last sync ${new Date(canvasLastSyncAt).toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short"
+                })}`
+              : " · Run Sync now in Settings to fetch planner items."}
+            {" · "}Auto refresh about every 4 hours.
+          </span>
+        </div>
+      ) : null}
+      {canvasSyncError ? (
+        <p className="canvas-sync-error" role="status">
+          Canvas: {canvasSyncError}
+        </p>
+      ) : null}
 
       {!dataLoading && (classes.length === 0 || assignments.length === 0) ? (
         <section className="card setup-checklist-card" aria-label="Getting started">

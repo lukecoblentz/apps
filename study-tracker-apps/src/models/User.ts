@@ -38,7 +38,15 @@ const userSchema = new Schema(
     },
     /** Shareable code for /register?invite=…; generated at signup or on first invite fetch. */
     inviteCode: { type: String, default: "", trim: true },
-    invitedByUserId: { type: Types.ObjectId, ref: "User", default: null }
+    invitedByUserId: { type: Types.ObjectId, ref: "User", default: null },
+    /** Target focused study time per calendar day (minutes). */
+    dailyGoalMinutes: { type: Number, default: 120, min: 1, max: 1440 },
+    /** Target focused study time per week (minutes). */
+    weeklyGoalMinutes: { type: Number, default: 600, min: 1, max: 10080 },
+    /** Last successful Canvas planner sync (server or manual). */
+    canvasLastSyncAt: { type: Date, default: null },
+    /** Short message from last failed Canvas sync; cleared on success. */
+    canvasLastSyncError: { type: String, default: "", maxlength: 500 }
   },
   { timestamps: true }
 );

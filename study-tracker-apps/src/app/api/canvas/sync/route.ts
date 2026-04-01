@@ -31,10 +31,21 @@ export async function POST() {
 
   try {
     const result = await syncCanvasForUser(userId, base, token);
+    await UserModel.findByIdAndUpdate(userId, {
+      $set: {
+        canvasLastSyncAt: new Date(),
+        canvasLastSyncError: ""
+      }
+    });
     return NextResponse.json(result);
   } catch (e) {
     console.error("Canvas sync failed", e);
     const message = e instanceof Error ? e.message : "Canvas sync failed";
+    const short =
+      message.length > 400 ? `${message.slice(0, 400)}…` : message;
+    await UserModel.findByIdAndUpdate(userId, {
+      $set: { canvasLastSyncError: short }
+    });
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
