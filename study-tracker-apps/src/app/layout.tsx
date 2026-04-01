@@ -5,7 +5,7 @@ import Script from "next/script";
 import { getServerSession } from "next-auth";
 import AuthProvider from "@/components/AuthProvider";
 import AuthStatus from "@/components/AuthStatus";
-import NavLink from "@/components/NavLink";
+import AppNav from "@/components/AppNav";
 import SignOutButton from "@/components/SignOutButton";
 import StudyTrackerLogo from "@/components/StudyTrackerLogo";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -65,20 +65,7 @@ export default async function RootLayout({
                   </span>
                   <span className="nav-title">Study Tracker</span>
                 </Link>
-                <div className="nav-links">
-                  {session?.user ? (
-                    <>
-                      <NavLink href="/">Dashboard</NavLink>
-                      <NavLink href="/analytics">Analytics</NavLink>
-                      <NavLink href="/subjects">Subjects</NavLink>
-                      <NavLink href="/classes">Classes</NavLink>
-                      <NavLink href="/assignments">Assignments</NavLink>
-                      <NavLink href="/calendar">Calendar</NavLink>
-                      <NavLink href="/settings">Settings</NavLink>
-                      <NavLink href="/invite">Invite</NavLink>
-                    </>
-                  ) : null}
-                </div>
+                {session?.user ? <AppNav /> : null}
                 <div className="nav-aside">
                   <ThemeToggle />
                   <AuthStatus />

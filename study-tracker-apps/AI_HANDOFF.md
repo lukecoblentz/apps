@@ -8,6 +8,14 @@
 - **Production URL:** `https://study-tracker-neon.vercel.app`
 - **Vercel:** Project name `study-tracker` — **Root Directory must be `study-tracker-apps`** so builds use this app’s `package.json`, not the parent folder.
 
+### Vercel Hobby: cron frequency limit (critical)
+
+> **Rate / plan limit:** On the **Hobby** plan, Vercel **only allows cron jobs that run at most once per day** (per job). Schedules that fire **multiple times per day** — for example `0 */4 * * *` (every 4 hours) or `0 * * * *` (hourly) — are **rejected**. The symptom is the same as a bad `vercel.json`: **deployments fail or never complete**, the dashboard may look stuck, and production won’t update until the schedule is fixed.
+>
+> **This repo’s fix:** Canvas sync uses **`0 6 * * *`** (daily, 06:00 UTC). Reminders use **`0 12 * * *`** (daily, 12:00 UTC). Do **not** revert to sub-daily server crons on Hobby without upgrading to **Pro** (or using an external scheduler). **Client-side:** while the app is open, `useCanvasAutoSync` still calls `/api/canvas/sync` about **every 4 hours** — that is separate from Vercel Cron and does not hit this limit.
+>
+> **Reference:** [Vercel Cron — usage & pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing) (plan limits and allowed frequencies).
+
 ## Quick context for the next AI session
 - Work in `study-tracker-apps/`; **git operations** run from `C:\Users\Luke\GitHub\Projects\apps` (parent repo).
 - Production secrets live in **Vercel env vars**, not in the repo; `.env.local` is local only.
@@ -19,7 +27,7 @@
 - Classes + assignments CRUD; **deleting a class** deletes all assignments for that class first (`DELETE /api/classes/[id]`); UI confirm warns.
 - **Assignment model:** `priority`: `low` | `normal` | `high` (default `normal`); **UI labels** “Medium” for `normal`. **Default priority from title** on create (manual + new Canvas rows): `inferPriorityFromTitle` in `src/lib/assignment-priority.ts` (exams/papers → high; labs/assignments → medium; discussion/read/misc → low).
 - Reminder cron at `/api/cron/reminders`; dedupe via `SentReminder`.
-- Canvas sync: base URL + token, **Sync now** (`POST /api/canvas/sync`). **Not automatic** — no background poll; new instructor assignments appear after the user runs sync (usually seconds). Settings explains this.
+- Canvas sync: base URL + token, **Sync now** (`POST /api/canvas/sync`). **Server:** daily cron `GET /api/cron/canvas-sync` on Hobby-safe schedule (see **`vercel.json`** + **Vercel Hobby: cron frequency limit** at top of this doc). **Client:** `useCanvasAutoSync` triggers sync ~every 4h while the app is open. Settings / Assignments explain timing and show last sync + errors.
 - **Google Calendar:** OAuth; `calendar.events` + `calendar.readonly`; Settings dropdown + `GET /api/google/calendars`; push one / push all; optional `googleAutoSync`. **Event shape:** end-of-day deadlines (11:58–11:59 PM in `CALENDAR_DEFAULT_TIMEZONE`) sync as **all-day** events with `Exact deadline:` in description; others stay 1-hour timed. **`src/lib/calendar-due-display.ts`** + **`google-calendar.ts`**: PATCH failure → DELETE + POST recreate; `parseGoogleCalendarApiError`; invalid TZ falls back to `America/New_York`.
 - **Microsoft Outlook:** OAuth; `Calendars.ReadWrite`; optional `msCalendarId` + `GET /api/microsoft/calendars`; push one / push all; optional `msAutoSync`.
 - **UI / theming:** System + light + dark via `data-theme` on `<html>`, toggle `ThemeToggle`, `localStorage` key `study-tracker-theme`, `beforeInteractive` script in `layout.tsx`. **`StudyTrackerLogo`** SVG in nav.
@@ -27,6 +35,7 @@
 - **Dashboard (`/`):** **`useSession`** waits for `authenticated` before fetching; **`fetchDashboardWithRetry`** (4 attempts, backoff) + `credentials: 'same-origin'` for cold start / transient failures. **`/api/dashboard`:** `export const dynamic = 'force-dynamic'`; try/catch 500. **“Due this week”** = to-dos with `dueAt` after end of **today** through **end of upcoming Sunday 11:59:59 PM** in `CALENDAR_DEFAULT_TIMEZONE` (`endOfUpcomingSundayNight` in `calendar-due-display.ts`), not rolling 7 days.
 
 ## Recent Fixes (historical + ongoing)
+- **2026-03-31 — Vercel Hobby deploy failure:** Canvas cron was `0 */4 * * *` (every 4h). **Hobby disallows multi-invocation-per-day crons** → deploys failed / wouldn’t redeploy. **Fixed:** `0 6 * * *` (daily 06:00 UTC) in `vercel.json`. See **Vercel Hobby: cron frequency limit (critical)** at top of this doc.
 - Assignment create duplicate key on `(userId, externalId)`: unique manual `externalId`, partial index on string `externalId`.
 - Class delete used to orphan assignments; now `AssignmentModel.deleteMany` then class delete.
 - Forgot-password 503 on local dev without Resend: dev path logs reset URL and returns 200 with instructions.
@@ -46,6 +55,7 @@
 - `src/app/assignments/page.tsx` — partitioned lists, filters, checklist, priority
 - `src/app/login/page.tsx`, `src/app/forgot-password/page.tsx`, `src/app/reset-password/page.tsx`
 - `src/app/api/cron/reminders/route.ts`
+- `src/app/api/cron/canvas-sync/route.ts` — Canvas planner sync for all users with tokens; **must** use a Hobby-compatible daily schedule in `vercel.json` (see **Vercel Hobby: cron frequency limit** at top of this doc)
 - `src/app/api/auth/forgot-password/route.ts`, `src/app/api/auth/reset-password/route.ts`
 - `src/lib/email.ts` — reminders + `sendPasswordResetEmail`
 - `src/lib/password-reset-token.ts`
@@ -64,15 +74,18 @@
 - `vercel.json`
 
 ## Vercel Cron (`vercel.json`) — do not change casually
+
+**See also the highlighted block** [Vercel Hobby: cron frequency limit (critical)](#vercel-hobby-cron-frequency-limit-critical) at the top of this file — that is the deploy-breaking constraint on Hobby.
+
 - **Purpose:** Vercel runs `GET /api/cron/reminders` and `GET /api/cron/canvas-sync` on schedules (see `vercel.json`).
-- **Hobby plan:** Cron jobs may run **at most once per day** per job. Schedules like `0 */4 * * *` (every 4 hours) **fail deployment** on Hobby — same symptom as “Vercel won’t load / won’t redeploy” when `vercel.json` is invalid. Use **daily** expressions only (e.g. `0 6 * * *`), or upgrade to Pro for sub-daily schedules.
-- **Current schedules:** Reminders `0 12 * * *` (12:00 UTC daily). Canvas sync `0 6 * * *` (06:00 UTC daily). **In-browser** Canvas refresh still runs every 4 hours via `useCanvasAutoSync` when the app is open.
-- **Why this matters:** An invalid cron expression or a schedule Vercel rejects can **fail production deploys** or leave Cron Jobs in a bad state. We hit this once; fixing the schedule fixed deploy.
+- **Hobby plan (rate limit):** Each cron **must not run more than once per calendar day**. Sub-daily schedules (e.g. every 4h, hourly) **fail deployment** — same symptom as when `vercel.json` is invalid (“Vercel won’t load”, deploy stuck). **Pro** (or external schedulers) is required for higher-frequency **server** crons.
+- **Current schedules (as in repo):** Reminders `0 12 * * *` (12:00 UTC daily). Canvas sync `0 6 * * *` (06:00 UTC daily). **In-browser** Canvas refresh: ~every **4 hours** via `useCanvasAutoSync` when the app is open (not limited by Vercel Cron the same way).
+- **Why this matters:** An invalid cron expression or a schedule your **plan** rejects can **fail production deploys** or leave Cron Jobs in a bad state.
 - **Before editing `vercel.json` crons:**
   - Use a valid **5-field** cron Vercel accepts (minute hour day month weekday).
-  - Confirm the plan’s Cron limits (frequency) in Vercel docs for your tier.
-  - If you want **hourly** reminder checks (closer to “remind X hours before due”), prefer something like `0 * * * *` (every hour at :00 UTC), not ad-hoc `*/15`-style experiments unless you have confirmed they are allowed and deploy cleanly.
-- **Recommendation:** Treat `vercel.json` cron changes like infra changes: deploy to a preview, confirm the deployment succeeds, then promote. Do not tweak cron “just to test” without reading the schedule semantics (UTC vs local).
+  - **On Hobby:** only **daily** schedules; confirm [usage & pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing).
+  - **Hourly reminders** (`0 * * * *`) require a tier that allows hourly crons — **not** Hobby; do not add hourly crons on Hobby without verifying the deploy.
+- **Recommendation:** Treat `vercel.json` cron changes like infra changes: deploy to a preview, confirm the deployment succeeds, then promote. Do not tweak cron “just to test” without reading the schedule semantics (UTC vs local) **and** plan limits.
 
 ## Environment Variables
 - **Core (required for app + auth):**
@@ -276,7 +289,7 @@
 - **Dashboard “Due this week”:** Replaced rolling 7 days with **after today through end of upcoming Sunday 11:59:59 PM** in `CALENDAR_DEFAULT_TIMEZONE` (`endOfUpcomingSundayNight`, `endOfCalendarDayInTimeZone`, `isSundayYmd`); stat/tab labels updated.
 - **Dashboard reliability:** `useSession` — fetch only when `authenticated`; `fetchDashboardWithRetry` (4 tries, exponential backoff); API `try/catch` + `dynamic = 'force-dynamic'` (fixes build static analysis noise).
 - **Completed assignments:** `.assignment-row-completed` — strikethrough title + muted meta in Completed section.
-- **Settings:** Canvas copy — sync is manual; timing expectations.
+- **Settings:** Canvas copy — server daily on Hobby + client ~4h while open; **Sync now**; last sync / errors.
 - **`src/components/NavLink.tsx`:** explicit `prefetch`.
 
 ### Current Status
@@ -308,6 +321,19 @@
 
 ### Env / Deploy Notes
 - Vercel Cron must include both reminder and canvas-sync jobs; `CRON_SECRET` required for cron routes in production.
+- **Hobby:** cron schedules **must be daily only** per job — see **Vercel Hobby: cron frequency limit (critical)** at top of `AI_HANDOFF.md`. Sub-daily server crons will break deploys.
 
 ### Known Issues
 - Service worker / deep offline cache not implemented (installable PWA + manifest only).
+
+### Date
+- 2026-03-31 (follow-up)
+
+### Done
+- Documented **Vercel Hobby cron rate / frequency limit** prominently at top of `AI_HANDOFF.md` (multi-invocation-per-day schedules fail deploys); expanded **Vercel Cron** section with cross-links and Pro vs Hobby notes; updated Current Status / Recent Fixes / Important Files / consolidated session notes for Canvas daily cron `0 6 * * *` + client `useCanvasAutoSync`.
+
+### Current Status
+- Deploys succeed on Hobby with current `vercel.json`. Do not reintroduce `0 */4 * * *` for server Canvas sync on Hobby without upgrading plan or using external cron.
+
+### Next Task
+- None required for Hobby cron — optional: Pro-only sub-daily server schedule if product needs it.
