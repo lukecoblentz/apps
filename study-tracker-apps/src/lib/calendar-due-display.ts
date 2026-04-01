@@ -100,3 +100,53 @@ export function withExactDuePreamble(description: string, exactLine: string): st
   const trimmed = description.trim();
   return trimmed ? `${line}\n\n${trimmed}` : line;
 }
+
+/** True if `ymd` is a Sunday in `timeZone`. */
+export function isSundayYmd(ymd: string, timeZone: string): boolean {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const anchor = Date.UTC(y, m - 1, d, 12, 0, 0);
+  for (let i = 0; i < 60 * 24 * 2; i++) {
+    const ms = anchor - 24 * 3600000 + i * 60 * 1000;
+    if (formatDateOnlyInTimeZone(new Date(ms), timeZone) !== ymd) continue;
+    const wd = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(
+      new Date(ms)
+    );
+    return wd.startsWith("Sun");
+  }
+  return false;
+}
+
+/**
+ * Last instant (23:59:59.999) of calendar day `dateYmd` in `timeZone`, as a UTC Date for queries.
+ */
+export function endOfCalendarDayInTimeZone(dateYmd: string, timeZone: string): Date {
+  const [y, m, d] = dateYmd.split("-").map(Number);
+  const anchor = Date.UTC(y, m - 1, d, 12, 0, 0);
+  const startScan = anchor - 48 * 3600000;
+  let lastMs: number | null = null;
+  for (let i = 0; i < 60 * 24 * 4; i++) {
+    const ms = startScan + i * 60 * 1000;
+    if (formatDateOnlyInTimeZone(new Date(ms), timeZone) === dateYmd) {
+      lastMs = ms;
+    }
+  }
+  if (lastMs === null) {
+    return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+  }
+  return new Date(lastMs + 59 * 1000 + 999);
+}
+
+/**
+ * End of the upcoming Sunday (11:59:59.999 PM) that closes the week containing `from`,
+ * using the same week boundaries as a typical Mon–Sun school week (Sunday is the last day).
+ */
+export function endOfUpcomingSundayNight(from: Date, timeZone: string): Date {
+  let ymd = formatDateOnlyInTimeZone(from, timeZone);
+  for (let i = 0; i < 7; i++) {
+    if (isSundayYmd(ymd, timeZone)) {
+      return endOfCalendarDayInTimeZone(ymd, timeZone);
+    }
+    ymd = addOneDayToYmd(ymd);
+  }
+  return endOfCalendarDayInTimeZone(ymd, timeZone);
+}

@@ -40,14 +40,14 @@ type LoadState = "loading" | "ready" | "error";
 const TAB_HINTS: Record<TabKey, string> = {
   today: "Everything due before midnight.",
   overdue: "Still marked to-do — tackle these first.",
-  week: "After today, within the next week.",
+  week: "Due after today through Sunday night (11:59 PM), using the app calendar timezone.",
   done: "Latest completions (last actions first)."
 };
 
 const TAB_KEYS: { key: TabKey; label: string }[] = [
   { key: "today", label: "Due today" },
   { key: "overdue", label: "Overdue" },
-  { key: "week", label: "Next 7 days" },
+  { key: "week", label: "Due this week" },
   { key: "done", label: "Done" }
 ];
 
@@ -123,7 +123,7 @@ export default function HomePage() {
             </div>
           </article>
           <article className="stat-card">
-            <div className="stat-label">Next 7 days</div>
+            <div className="stat-label">Due this week</div>
             <div className="stat-value">
               {loadState === "loading" ? (
                 <span className="skeleton-inline skeleton-inline-stat" aria-hidden />

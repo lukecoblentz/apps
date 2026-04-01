@@ -1322,6 +1322,23 @@ input[type="color"] {
   opacity: 0.92;
 }
 
+.assignments-list-done .assignment-row-completed {
+  opacity: 0.88;
+}
+
+.assignments-list-done .assignment-row-completed .list-item-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.assignments-list-done .assignment-row-completed .list-item-meta {
+  color: var(--text-faint);
+}
+
+.assignments-list-done .assignment-row-completed .badge:not(.badge-done) {
+  opacity: 0.75;
+}
+
 @media (max-width: 640px) {
   .nav-inner {
     padding: 0 16px;

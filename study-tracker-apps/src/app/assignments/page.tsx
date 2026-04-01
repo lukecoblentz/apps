@@ -367,7 +367,10 @@ export default function AssignmentsPage() {
     setActionError(payload?.error || "Could not push all assignments to Outlook.");
   }
 
-  function renderAssignmentRow(a: AssignmentItem, opts: { overdue?: boolean }) {
+  function renderAssignmentRow(
+    a: AssignmentItem,
+    opts: { overdue?: boolean; completed?: boolean }
+  ) {
     if (editingId === a._id) {
       return (
         <li
@@ -435,8 +438,9 @@ export default function AssignmentsPage() {
 
     const enterDone =
       a.status === "done" && enteringDoneIds.has(a._id) ? " assignment-row-enter-done" : "";
+    const completedClass = opts.completed ? " assignment-row-completed" : "";
     const rowClass =
-      `list-item assignment-row${opts.overdue ? " list-item-overdue" : ""}${enterDone}`.trim();
+      `list-item assignment-row${opts.overdue ? " list-item-overdue" : ""}${enterDone}${completedClass}`.trim();
 
     return (
       <li key={a._id} id={`assignment-${a._id}`} className={rowClass}>
@@ -815,7 +819,7 @@ export default function AssignmentsPage() {
                 <h3 className="assignments-section-title">Completed assignments</h3>
                 {done.length ? (
                   <ul className="list-plain assignments-list assignments-list-done">
-                    {done.map((a) => renderAssignmentRow(a, {}))}
+                    {done.map((a) => renderAssignmentRow(a, { completed: true }))}
                   </ul>
                 ) : (
                   <p className="assignments-section-hint">

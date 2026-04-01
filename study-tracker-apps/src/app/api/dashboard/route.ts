@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { endOfUpcomingSundayNight, getCalendarDefaultTimeZone } from "@/lib/calendar-due-display";
 import { connectToDatabase } from "@/lib/mongodb";
 import { AssignmentModel } from "@/models/Assignment";
 import { getCurrentUserId } from "@/lib/require-user";
@@ -23,15 +24,8 @@ export async function GET() {
   const now = new Date();
   const todayStart = startOfToday(now);
   const todayEnd = endOfToday(now);
-  const weekEnd = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 7,
-    23,
-    59,
-    59,
-    999
-  );
+  /** After today through end of Sunday 11:59:59 PM in CALENDAR_DEFAULT_TIMEZONE (or default). */
+  const weekEnd = endOfUpcomingSundayNight(now, getCalendarDefaultTimeZone());
 
   const base = { userId };
 

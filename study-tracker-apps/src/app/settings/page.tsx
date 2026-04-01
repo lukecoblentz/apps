@@ -396,6 +396,11 @@ export default function SettingsPage() {
             token from Canvas. Courses and planner assignments sync into Study
             Tracker.
           </p>
+          <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: "0.875rem" }}>
+            New assignments your instructor adds in Canvas are not pulled automatically. Use{" "}
+            <strong>Sync now</strong> when you want to refresh; the API call usually finishes in a
+            few seconds, and new items appear as soon as Canvas exposes them in the planner.
+          </p>
           <form className="form-stack" onSubmit={saveCanvas} style={{ marginTop: 16 }}>
             <div className="field">
               <label htmlFor="canvas-url">Canvas base URL</label>
