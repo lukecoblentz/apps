@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
+import { AssignmentModel } from "@/models/Assignment";
 import { ClassModel } from "@/models/Class";
 import { classSchema } from "@/lib/validators/class";
 import { getCurrentUserId } from "@/lib/require-user";
@@ -47,14 +48,13 @@ export async function DELETE(
   }
 
   await connectToDatabase();
-  const deleted = await ClassModel.findOneAndDelete({
-    _id: params.id,
-    userId
-  });
-
-  if (!deleted) {
+  const existing = await ClassModel.findOne({ _id: params.id, userId });
+  if (!existing) {
     return NextResponse.json({ error: "Class not found" }, { status: 404 });
   }
+
+  await AssignmentModel.deleteMany({ userId, classId: params.id });
+  await ClassModel.deleteOne({ _id: params.id, userId });
 
   return NextResponse.json({ ok: true });
 }

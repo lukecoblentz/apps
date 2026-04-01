@@ -15,9 +15,14 @@ export default function SettingsPage() {
   const [canvasTokenInput, setCanvasTokenInput] = useState("");
   const [hasCanvasToken, setHasCanvasToken] = useState(false);
   const [googleCalendarId, setGoogleCalendarId] = useState("primary");
+  const [googleCalendars, setGoogleCalendars] = useState<{ id: string; name: string }[]>([]);
+  const [googleCalendarsLoading, setGoogleCalendarsLoading] = useState(false);
   const [hasGoogleToken, setHasGoogleToken] = useState(false);
   const [googleAutoSync, setGoogleAutoSync] = useState(false);
   const [hasMicrosoftToken, setHasMicrosoftToken] = useState(false);
+  const [msCalendarId, setMsCalendarId] = useState("");
+  const [msCalendars, setMsCalendars] = useState<{ id: string; name: string }[]>([]);
+  const [msCalendarsLoading, setMsCalendarsLoading] = useState(false);
   const [msAutoSync, setMsAutoSync] = useState(false);
   const [reminderSet, setReminderSet] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState("");
@@ -44,6 +49,7 @@ export default function SettingsPage() {
     setGoogleCalendarId(data.googleCalendarId || "primary");
     setGoogleAutoSync(Boolean(data.googleAutoSync));
     setHasMicrosoftToken(Boolean(data.hasMicrosoftToken));
+    setMsCalendarId(typeof data.msCalendarId === "string" ? data.msCalendarId : "");
     setMsAutoSync(Boolean(data.msAutoSync));
     const mins: number[] = data.reminderMinutesBefore || [1440, 120];
     setReminderSet(new Set(mins));
@@ -53,6 +59,62 @@ export default function SettingsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function loadGoogleCalendars() {
+    setGoogleCalendarsLoading(true);
+    setGoogleCalendars([]);
+    const res = await fetch("/api/google/calendars", { cache: "no-store" });
+    setGoogleCalendarsLoading(false);
+    if (!res.ok) {
+      return;
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.calendars) ? data.calendars : [];
+    setGoogleCalendars(
+      list
+        .filter((c: { id?: string }) => typeof c?.id === "string" && c.id.length > 0)
+        .map((c: { id: string; name?: string }) => ({
+          id: c.id,
+          name: typeof c.name === "string" ? c.name : "Calendar"
+        }))
+    );
+  }
+
+  useEffect(() => {
+    if (!loading && hasGoogleToken) {
+      void loadGoogleCalendars();
+    } else if (!hasGoogleToken) {
+      setGoogleCalendars([]);
+    }
+  }, [loading, hasGoogleToken]);
+
+  async function loadMsCalendars() {
+    setMsCalendarsLoading(true);
+    setMsCalendars([]);
+    const res = await fetch("/api/microsoft/calendars", { cache: "no-store" });
+    setMsCalendarsLoading(false);
+    if (!res.ok) {
+      return;
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.calendars) ? data.calendars : [];
+    setMsCalendars(
+      list
+        .filter((c: { id?: string }) => typeof c?.id === "string" && c.id.length > 0)
+        .map((c: { id: string; name?: string }) => ({
+          id: c.id,
+          name: typeof c.name === "string" ? c.name : "Calendar"
+        }))
+    );
+  }
+
+  useEffect(() => {
+    if (!loading && hasMicrosoftToken) {
+      void loadMsCalendars();
+    } else if (!hasMicrosoftToken) {
+      setMsCalendars([]);
+    }
+  }, [loading, hasMicrosoftToken]);
 
   useEffect(() => {
     const google = searchParams.get("google");
@@ -150,24 +212,22 @@ export default function SettingsPage() {
     setMessage("Canvas token removed from your account.");
   }
 
-  async function saveGoogleCalendarId(e: FormEvent) {
-    e.preventDefault();
+  async function saveGoogleCalendarId(next: string) {
     setMessage("");
     setError("");
-    const body: Record<string, string> = {
-      googleCalendarId: googleCalendarId || "primary"
-    };
+    const value = next.trim() || "primary";
+    setGoogleCalendarId(value);
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ googleCalendarId: value })
     });
     if (!res.ok) {
-      setError("Could not save Google Calendar settings.");
+      setError("Could not save Google Calendar.");
+      void load();
       return;
     }
-    setMessage("Google Calendar id saved.");
-    void load();
+    setMessage("Google calendar saved.");
   }
 
   async function saveGoogleAutoSync(nextValue: boolean) {
@@ -200,12 +260,31 @@ export default function SettingsPage() {
       return;
     }
     setHasGoogleToken(false);
+    setGoogleCalendarId("primary");
+    setGoogleCalendars([]);
     setMessage("Google Calendar disconnected.");
   }
 
   function connectGoogle() {
     setGoogleConnecting(true);
     window.location.href = "/api/google/connect";
+  }
+
+  async function saveMsCalendarId(next: string) {
+    setMessage("");
+    setError("");
+    setMsCalendarId(next);
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ msCalendarId: next })
+    });
+    if (!res.ok) {
+      setError("Could not save Outlook calendar.");
+      void load();
+      return;
+    }
+    setMessage("Outlook calendar saved.");
   }
 
   async function saveMsAutoSync(nextValue: boolean) {
@@ -238,6 +317,8 @@ export default function SettingsPage() {
       return;
     }
     setHasMicrosoftToken(false);
+    setMsCalendarId("");
+    setMsCalendars([]);
     setMessage("Microsoft Calendar disconnected.");
   }
 
@@ -279,20 +360,7 @@ export default function SettingsPage() {
       </header>
 
       <div className="grid">
-        {message ? (
-          <p
-            className="muted"
-            style={{
-              margin: 0,
-              padding: "12px 14px",
-              borderRadius: 12,
-              background: "rgba(5, 150, 105, 0.12)",
-              color: "var(--success)"
-            }}
-          >
-            {message}
-          </p>
-        ) : null}
+        {message ? <p className="banner-success">{message}</p> : null}
         {error ? <p className="alert-error">{error}</p> : null}
 
         <section className="card settings-section">
@@ -387,24 +455,53 @@ export default function SettingsPage() {
         <section className="card settings-section">
           <h2>Google Calendar</h2>
           <p className="card-subtitle">
-            Connect your Google account with OAuth, choose a calendar id, then
-            use &quot;Push Google&quot; in Assignments.
+            Connect your Google account with OAuth, pick which calendar receives new
+            events, then use &quot;Push Google&quot; in Assignments. Reconnect once if
+            calendar list fails (added read-only calendar scope).
           </p>
-          <form className="form-stack" onSubmit={saveGoogleCalendarId} style={{ marginTop: 16 }}>
-            <div className="field">
-              <label htmlFor="google-calendar-id">Google calendar id</label>
-              <input
-                id="google-calendar-id"
-                value={googleCalendarId}
-                onChange={(e) => setGoogleCalendarId(e.target.value)}
-                placeholder="primary"
-                autoComplete="off"
-              />
-            </div>
+          <form className="form-stack" style={{ marginTop: 16 }}>
+            {hasGoogleToken ? (
+              <div className="field">
+                <label htmlFor="google-calendar">Google calendar</label>
+                <div className="row-actions" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <select
+                    id="google-calendar"
+                    value={googleCalendarId}
+                    onChange={(e) => void saveGoogleCalendarId(e.target.value)}
+                    disabled={googleCalendarsLoading}
+                    style={{ minWidth: 220, flex: "1 1 200px" }}
+                  >
+                    <option value="primary">Primary calendar</option>
+                    {googleCalendarId !== "primary" &&
+                    !googleCalendars.some((c) => c.id === googleCalendarId) ? (
+                      <option value={googleCalendarId}>
+                        Saved calendar (refresh list if needed)
+                      </option>
+                    ) : null}
+                    {googleCalendars
+                      .filter((c) => c.id !== "primary")
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={googleCalendarsLoading}
+                    onClick={() => void loadGoogleCalendars()}
+                  >
+                    {googleCalendarsLoading ? "Loading…" : "Refresh list"}
+                  </button>
+                </div>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Only calendars you can edit are listed. Updates to existing linked
+                  events keep using the stored Google event id.
+                </p>
+              </div>
+            ) : null}
             <div className="row-actions">
-              <button type="submit" className="btn btn-primary">
-                Save calendar id
-              </button>
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -443,10 +540,47 @@ export default function SettingsPage() {
         <section className="card settings-section">
           <h2>Microsoft Outlook Calendar</h2>
           <p className="card-subtitle">
-            Connect your Microsoft account with OAuth, then use
-            &quot;Push Outlook&quot; in Assignments.
+            Connect your Microsoft account with OAuth, pick which calendar receives new
+            events, then use &quot;Push Outlook&quot; in Assignments.
           </p>
           <form className="form-stack" style={{ marginTop: 16 }}>
+            {hasMicrosoftToken ? (
+              <div className="field">
+                <label htmlFor="ms-calendar">Outlook calendar</label>
+                <div className="row-actions" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <select
+                    id="ms-calendar"
+                    value={msCalendarId}
+                    onChange={(e) => void saveMsCalendarId(e.target.value)}
+                    disabled={msCalendarsLoading}
+                    style={{ minWidth: 220, flex: "1 1 200px" }}
+                  >
+                    <option value="">Default calendar</option>
+                    {msCalendarId &&
+                    !msCalendars.some((c) => c.id === msCalendarId) ? (
+                      <option value={msCalendarId}>Saved calendar (reload list if needed)</option>
+                    ) : null}
+                    {msCalendars.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={msCalendarsLoading}
+                    onClick={() => void loadMsCalendars()}
+                  >
+                    {msCalendarsLoading ? "Loading…" : "Refresh list"}
+                  </button>
+                </div>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Updates to existing linked events still use Microsoft&apos;s event id; new
+                  events go to the calendar you choose here.
+                </p>
+              </div>
+            ) : null}
             <div className="row-actions">
               <button
                 type="button"

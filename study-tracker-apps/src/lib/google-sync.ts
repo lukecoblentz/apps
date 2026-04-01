@@ -61,6 +61,31 @@ export async function getGoogleAuthForUser(userId: string, origin?: string) {
   return { token, calendarId, autoSyncEnabled };
 }
 
+export async function listGoogleCalendarsForUser(userId: string, origin?: string) {
+  const { token } = await getGoogleAuthForUser(userId, origin);
+  const listUrl = new URL("https://www.googleapis.com/calendar/v3/users/me/calendarList");
+  listUrl.searchParams.set("minAccessRole", "writer");
+
+  const res = await fetch(listUrl.toString(), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      typeof body?.error?.message === "string"
+        ? body.error.message
+        : "Google Calendar list request failed";
+    throw new Error(msg);
+  }
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return items
+    .map((c: { id?: string; summary?: string }) => ({
+      id: typeof c.id === "string" ? c.id : "",
+      name: typeof c.summary === "string" ? c.summary : "Calendar"
+    }))
+    .filter((c: { id: string }) => c.id.length > 0);
+}
+
 export async function pushAssignmentToGoogle(userId: string, assignmentId: string, origin?: string) {
   const { token, calendarId } = await getGoogleAuthForUser(userId, origin);
   const assignment = await AssignmentModel.findOne({

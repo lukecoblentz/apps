@@ -1,16 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("reset") === "success") {
+      setMessage("Password updated. Sign in with your new password.");
+    }
+  }, [searchParams]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -59,7 +67,22 @@ export default function LoginPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="login-password">Password</label>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: 8,
+                marginBottom: 6
+              }}
+            >
+              <label htmlFor="login-password" style={{ marginBottom: 0 }}>
+                Password
+              </label>
+              <Link href="/forgot-password" className="text-link" style={{ fontSize: "0.8125rem" }}>
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="login-password"
               type="password"
@@ -70,6 +93,7 @@ export default function LoginPage() {
               required
             />
           </div>
+          {message ? <p className="banner-success">{message}</p> : null}
           <button className="btn btn-primary" type="submit" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}
           </button>

@@ -15,7 +15,7 @@ Copy `.env.example` to `.env.local` and fill in values:
 - `MONGODB_URI` — MongoDB Atlas (or local) connection string.
 - `NEXTAUTH_URL` — App origin (e.g. `http://localhost:3000` locally, or your production URL).
 - `NEXTAUTH_SECRET` — Long random string (e.g. `openssl rand -base64 32`).
-- **Reminders (optional locally, recommended in production):** `RESEND_API_KEY`, `EMAIL_FROM` (verified sender), `CRON_SECRET` (protects `/api/cron/reminders`; Vercel sends this as `Authorization: Bearer …` when the job runs).
+- **Reminders (optional locally, recommended in production):** `RESEND_API_KEY`, `EMAIL_FROM` (verified sender), `CRON_SECRET` (protects `/api/cron/reminders`; Vercel sends this as `Authorization: Bearer …` when the job runs). The same Resend settings send **forgot-password** reset links; `NEXTAUTH_URL` must match the site users open so the email link is correct. **Local dev without Resend:** with `npm run dev`, forgot-password still creates a valid reset token and prints the full reset URL in the terminal (check the window where the dev server runs). For `npm run start` / production, configure Resend or email sending will fail with an error.
 - **Google Calendar OAuth:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and optional `GOOGLE_REDIRECT_URI` (defaults to `${NEXTAUTH_URL}/api/google/callback`).
 - **Microsoft Calendar OAuth:** `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, and optional `MICROSOFT_REDIRECT_URI` (defaults to `${NEXTAUTH_URL}/api/microsoft/callback`).
 

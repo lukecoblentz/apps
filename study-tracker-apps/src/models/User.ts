@@ -11,6 +11,9 @@ const userSchema = new Schema(
       trim: true
     },
     passwordHash: { type: String, required: true },
+    /** SHA-256 hex of raw reset token; cleared after use or when issuing a new token. */
+    passwordResetTokenHash: { type: String, default: "" },
+    passwordResetExpiresAt: { type: Date, default: null },
     canvasBaseUrl: { type: String, default: "" },
     canvasAccessToken: { type: String, default: "" },
     googleAccessToken: { type: String, default: "" },
@@ -23,6 +26,8 @@ const userSchema = new Schema(
     msAccessToken: { type: String, default: "" },
     msRefreshToken: { type: String, default: "" },
     msTokenExpiresAt: { type: Date, default: null },
+    /** Empty string = default calendar (`/me/events`). */
+    msCalendarId: { type: String, default: "" },
     msAutoSync: { type: Boolean, default: false },
     msOAuthState: { type: String, default: "" },
     msOAuthStateExpiresAt: { type: Date, default: null },

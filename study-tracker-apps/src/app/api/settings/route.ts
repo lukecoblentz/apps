@@ -16,6 +16,7 @@ const patchSchema = z
     googleCalendarId: z.string().max(400).optional(),
     googleAutoSync: z.boolean().optional(),
     googleDisconnect: z.boolean().optional(),
+    msCalendarId: z.string().max(400).optional(),
     msAutoSync: z.boolean().optional(),
     msDisconnect: z.boolean().optional()
   })
@@ -43,6 +44,7 @@ export async function GET() {
     googleAutoSync?: boolean;
     msAccessToken?: string;
     msRefreshToken?: string;
+    msCalendarId?: string;
     msAutoSync?: boolean;
   };
   const reminders = user.reminderMinutesBefore;
@@ -55,6 +57,7 @@ export async function GET() {
     googleCalendarId: user.googleCalendarId || "primary",
     googleAutoSync: Boolean(user.googleAutoSync),
     hasMicrosoftToken: Boolean(user.msAccessToken || user.msRefreshToken),
+    msCalendarId: user.msCalendarId?.trim() || "",
     msAutoSync: Boolean(user.msAutoSync)
   });
 }
@@ -114,12 +117,16 @@ export async function PATCH(req: NextRequest) {
     $set.googleAccessToken = "";
     $set.googleRefreshToken = "";
     $set.googleTokenExpiresAt = null;
+    $set.googleCalendarId = "primary";
   }
   if (parsed.data.googleCalendarId !== undefined) {
     $set.googleCalendarId = parsed.data.googleCalendarId || "primary";
   }
   if (parsed.data.googleAutoSync !== undefined) {
     $set.googleAutoSync = parsed.data.googleAutoSync;
+  }
+  if (parsed.data.msCalendarId !== undefined) {
+    $set.msCalendarId = parsed.data.msCalendarId.trim();
   }
   if (parsed.data.msAutoSync !== undefined) {
     $set.msAutoSync = parsed.data.msAutoSync;
@@ -128,6 +135,7 @@ export async function PATCH(req: NextRequest) {
     $set.msAccessToken = "";
     $set.msRefreshToken = "";
     $set.msTokenExpiresAt = null;
+    $set.msCalendarId = "";
   }
 
   if (Object.keys($set).length === 0) {

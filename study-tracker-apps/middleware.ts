@@ -5,6 +5,7 @@ export const config = {
     "/",
     "/classes",
     "/assignments",
+    "/calendar",
     "/settings",
     "/api/classes/:path*",
     "/api/assignments/:path*",

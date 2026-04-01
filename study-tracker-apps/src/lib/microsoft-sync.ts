@@ -6,18 +6,24 @@ type MicrosoftUser = {
   msAccessToken?: string;
   msRefreshToken?: string;
   msTokenExpiresAt?: Date | string | null;
+  msCalendarId?: string;
   msAutoSync?: boolean;
 };
 
-function graphEventUrl(eventId?: string) {
-  if (eventId) {
-    return `https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(eventId)}`;
+function graphEventUrl(params: { eventId?: string; calendarId?: string }) {
+  if (params.eventId) {
+    return `https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(params.eventId)}`;
+  }
+  const cal = params.calendarId?.trim();
+  if (cal) {
+    return `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(cal)}/events`;
   }
   return "https://graph.microsoft.com/v1.0/me/events";
 }
 
 async function upsertMicrosoftCalendarEvent(params: {
   accessToken: string;
+  calendarId?: string;
   title: string;
   description?: string;
   dueAt: Date;
@@ -42,14 +48,20 @@ async function upsertMicrosoftCalendarEvent(params: {
   };
 
   const method = params.existingEventId ? "PATCH" : "POST";
-  const res = await fetch(graphEventUrl(params.existingEventId), {
-    method,
-    headers: {
-      Authorization: `Bearer ${params.accessToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+  const res = await fetch(
+    graphEventUrl({
+      eventId: params.existingEventId,
+      calendarId: params.existingEventId ? undefined : params.calendarId
+    }),
+    {
+      method,
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -84,6 +96,7 @@ export async function getMicrosoftAuthForUser(userId: string, origin?: string) {
   let token = user.msAccessToken?.trim() || "";
   const refreshToken = user.msRefreshToken?.trim() || "";
   const expiresAt = user.msTokenExpiresAt ? new Date(user.msTokenExpiresAt) : null;
+  const calendarId = user.msCalendarId?.trim() || "";
   const autoSyncEnabled = Boolean(user.msAutoSync);
 
   if (!token && !refreshToken) {
@@ -111,11 +124,33 @@ export async function getMicrosoftAuthForUser(userId: string, origin?: string) {
     throw new Error("No usable Microsoft access token found. Reconnect in Settings.");
   }
 
-  return { token, autoSyncEnabled };
+  return { token, calendarId, autoSyncEnabled };
+}
+
+export async function listMicrosoftCalendarsForUser(userId: string, origin?: string) {
+  const { token } = await getMicrosoftAuthForUser(userId, origin);
+  const res = await fetch("https://graph.microsoft.com/v1.0/me/calendars", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message =
+      typeof body?.error?.message === "string"
+        ? body.error.message
+        : "Microsoft Graph calendars request failed";
+    throw new Error(message);
+  }
+  const value = Array.isArray(body?.value) ? body.value : [];
+  return value
+    .map((c: { id?: string; name?: string }) => ({
+      id: typeof c.id === "string" ? c.id : "",
+      name: typeof c.name === "string" ? c.name : "Calendar"
+    }))
+    .filter((c: { id: string }) => c.id.length > 0);
 }
 
 export async function pushAssignmentToMicrosoft(userId: string, assignmentId: string, origin?: string) {
-  const { token } = await getMicrosoftAuthForUser(userId, origin);
+  const { token, calendarId } = await getMicrosoftAuthForUser(userId, origin);
   const assignment = await AssignmentModel.findOne({ _id: assignmentId, userId })
     .populate("classId", "name")
     .lean();
@@ -136,6 +171,7 @@ export async function pushAssignmentToMicrosoft(userId: string, assignmentId: st
 
   const { eventId } = await upsertMicrosoftCalendarEvent({
     accessToken: token,
+    calendarId,
     title,
     description: a.description || "",
     dueAt: new Date(a.dueAt),

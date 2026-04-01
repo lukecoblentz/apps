@@ -89,6 +89,13 @@ export default function ClassesPage() {
   }
 
   async function onDelete(id: string) {
+    if (
+      !window.confirm(
+        "Delete this class? All assignments in this class will be removed permanently."
+      )
+    ) {
+      return;
+    }
     const res = await fetch(`/api/classes/${id}`, { method: "DELETE" });
     if (res.ok) {
       if (editingId === id) setEditingId(null);

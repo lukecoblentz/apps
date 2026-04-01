@@ -66,6 +66,48 @@ export async function sendAssignmentReminderEmail(input: {
   return { sent: true as const };
 }
 
+export async function sendPasswordResetEmail(input: { to: string; resetUrl: string }) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.warn("[password-reset] RESEND_API_KEY is not set; email skipped for", input.to);
+    return { sent: false as const, reason: "no_api_key" as const };
+  }
+
+  const from =
+    process.env.EMAIL_FROM?.trim() || "Study Tracker <onboarding@resend.dev>";
+
+  const subject = "Reset your Study Tracker password";
+  const text = `You asked to reset your Study Tracker password.\n\nOpen this link (valid for 1 hour):\n${input.resetUrl}\n\nIf you did not request this, you can ignore this email.\n`;
+
+  const html = `
+    <p style="font-family:system-ui,sans-serif;font-size:15px;color:#0f172a;">
+      You asked to reset your <strong>Study Tracker</strong> password.
+    </p>
+    <p style="font-family:system-ui,sans-serif;font-size:15px;">
+      <a href="${escapeHtml(input.resetUrl)}" style="color:#4338ca;font-weight:600;">Reset password</a>
+    </p>
+    <p style="font-family:system-ui,sans-serif;font-size:13px;color:#64748b;">
+      This link expires in 1 hour. If you did not request this, you can ignore this email.
+    </p>
+  `;
+
+  const resend = new Resend(key);
+  const { error } = await resend.emails.send({
+    from,
+    to: input.to,
+    subject,
+    text,
+    html
+  });
+
+  if (error) {
+    console.error("[password-reset] Resend error", error);
+    return { sent: false as const, reason: "resend_error" as const, error };
+  }
+
+  return { sent: true as const };
+}
+
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, "&amp;")

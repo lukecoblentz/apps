@@ -77,6 +77,13 @@ export default function AssignmentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (!hash.startsWith("#assignment-")) return;
+    const el = document.querySelector(hash);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [assignments]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setCreateError("");
@@ -360,7 +367,12 @@ export default function AssignmentsPage() {
             <ul className="list-plain assignments-list">
               {assignments.map((a) =>
                 editingId === a._id ? (
-                  <li key={a._id} className="list-item" style={{ flexWrap: "wrap" }}>
+                  <li
+                    key={a._id}
+                    id={`assignment-${a._id}`}
+                    className="list-item"
+                    style={{ flexWrap: "wrap" }}
+                  >
                     <form
                       className="form-stack"
                       style={{ flex: 1, minWidth: 260 }}
@@ -408,7 +420,7 @@ export default function AssignmentsPage() {
                     </form>
                   </li>
                 ) : (
-                  <li key={a._id} className="list-item assignment-row">
+                  <li key={a._id} id={`assignment-${a._id}`} className="list-item assignment-row">
                     <div className="list-item-main assignment-main" style={{ minWidth: 0 }}>
                       {a.classId?.color ? (
                         <span
