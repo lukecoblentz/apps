@@ -64,8 +64,9 @@
 - `vercel.json`
 
 ## Vercel Cron (`vercel.json`) — do not change casually
-- **Purpose:** Vercel runs `GET /api/cron/reminders` on a schedule (see `vercel.json`).
-- **Current schedule (as of handoff):** `0 12 * * *` — once per day at **12:00 UTC**. Reminder emails are only checked at that time; do not expect “hourly” reminder behavior unless the schedule is hourly.
+- **Purpose:** Vercel runs `GET /api/cron/reminders` and `GET /api/cron/canvas-sync` on schedules (see `vercel.json`).
+- **Hobby plan:** Cron jobs may run **at most once per day** per job. Schedules like `0 */4 * * *` (every 4 hours) **fail deployment** on Hobby — same symptom as “Vercel won’t load / won’t redeploy” when `vercel.json` is invalid. Use **daily** expressions only (e.g. `0 6 * * *`), or upgrade to Pro for sub-daily schedules.
+- **Current schedules:** Reminders `0 12 * * *` (12:00 UTC daily). Canvas sync `0 6 * * *` (06:00 UTC daily). **In-browser** Canvas refresh still runs every 4 hours via `useCanvasAutoSync` when the app is open.
 - **Why this matters:** An invalid cron expression or a schedule Vercel rejects can **fail production deploys** or leave Cron Jobs in a bad state. We hit this once; fixing the schedule fixed deploy.
 - **Before editing `vercel.json` crons:**
   - Use a valid **5-field** cron Vercel accepts (minute hour day month weekday).
@@ -298,7 +299,7 @@
 ### Done
 - Habit-building features: focus timer (25/50/custom, ring, pause/resume, log session, chime + optional notification, completion state), streaks (current/longest from study sessions in `CALENDAR_DEFAULT_TIMEZONE`), goals (daily/weekly on User + progress UI), analytics page with Recharts weekly bar, insights, subject breakdown, recent sessions.
 - Subjects: `Subject` model, `/subjects` CRUD, sessions taggable; analytics filter by subject.
-- Canvas: server cron `GET /api/cron/canvas-sync` every 4 hours (`vercel.json`), POST `/api/canvas/sync` updates `canvasLastSyncAt` / `canvasLastSyncError`; client `useCanvasAutoSync` polls every 4h when logged in; Settings + Assignments show last sync and errors; manual vs Canvas badges on assignment rows.
+- Canvas: server cron `GET /api/cron/canvas-sync` **daily** on Hobby-compatible schedule (`vercel.json`); POST `/api/canvas/sync` updates `canvasLastSyncAt` / `canvasLastSyncError`; client `useCanvasAutoSync` polls every 4h when logged in; Settings + Assignments show last sync and errors; manual vs Canvas badges on assignment rows.
 - PWA: `src/app/manifest.ts`, icons under `public/icons/`, `viewport` theme colors.
 - Footer support link (Cash App). Nav: Analytics, Subjects.
 

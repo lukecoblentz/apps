@@ -576,7 +576,8 @@ export default function AssignmentsPage() {
                   timeStyle: "short"
                 })}`
               : " · Run Sync now in Settings to fetch planner items."}
-            {" · "}Auto refresh about every 4 hours.
+            {" · "}
+            While this tab is open, sync runs about every 4 hours; the server also syncs daily.
           </span>
         </div>
       ) : null}

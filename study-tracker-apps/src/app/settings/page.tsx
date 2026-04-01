@@ -465,9 +465,9 @@ export default function SettingsPage() {
             Tracker.
           </p>
           <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: "0.875rem" }}>
-            While this tab is open, the app refreshes Canvas about every four hours. The server also
-            syncs on the same schedule, so new instructor assignments typically appear within a few
-            hours without you doing anything. Use <strong>Sync now</strong> for immediate updates.
+            While this tab is open, the app refreshes Canvas about every four hours. On Vercel Hobby,
+            the server sync runs <strong>once per day</strong> (see deploy notes in the repo). Use{" "}
+            <strong>Sync now</strong> for immediate updates.
           </p>
           {canvasLastSyncAt ? (
             <p className="sync-meta muted" style={{ marginTop: 10, marginBottom: 0 }}>
