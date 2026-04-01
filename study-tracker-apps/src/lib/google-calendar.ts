@@ -1,3 +1,12 @@
+import {
+  addOneDayToYmd,
+  formatDateOnlyInTimeZone,
+  formatExactDueForDescription,
+  getCalendarDefaultTimeZone,
+  isEndOfDayStyleDeadline,
+  withExactDuePreamble
+} from "@/lib/calendar-due-display";
+
 type PushParams = {
   accessToken: string;
   calendarId: string;
@@ -17,14 +26,33 @@ function url(calendarId: string, eventId?: string) {
 
 export async function upsertGoogleCalendarEvent(params: PushParams) {
   const due = params.dueAt;
-  const end = new Date(due.getTime() + 60 * 60 * 1000);
+  const tz = getCalendarDefaultTimeZone();
+  const exact = formatExactDueForDescription(due, tz);
+  const allDay = isEndOfDayStyleDeadline(due, tz);
+  const description = allDay
+    ? withExactDuePreamble(params.description || "", exact)
+    : params.description || "";
 
-  const payload = {
-    summary: params.title,
-    description: params.description || "",
-    start: { dateTime: due.toISOString() },
-    end: { dateTime: end.toISOString() }
-  };
+  let payload: Record<string, unknown>;
+
+  if (allDay) {
+    const dateStr = formatDateOnlyInTimeZone(due, tz);
+    const endExclusive = addOneDayToYmd(dateStr);
+    payload = {
+      summary: params.title,
+      description,
+      start: { date: dateStr },
+      end: { date: endExclusive }
+    };
+  } else {
+    const end = new Date(due.getTime() + 60 * 60 * 1000);
+    payload = {
+      summary: params.title,
+      description,
+      start: { dateTime: due.toISOString() },
+      end: { dateTime: end.toISOString() }
+    };
+  }
 
   const method = params.existingEventId ? "PATCH" : "POST";
   const res = await fetch(url(params.calendarId, params.existingEventId), {

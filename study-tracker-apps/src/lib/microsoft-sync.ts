@@ -1,3 +1,11 @@
+import {
+  addOneDayToYmd,
+  formatDateOnlyInTimeZone,
+  formatExactDueForDescription,
+  getCalendarDefaultTimeZone,
+  isEndOfDayStyleDeadline,
+  withExactDuePreamble
+} from "@/lib/calendar-due-display";
 import { refreshMicrosoftAccessToken } from "@/lib/microsoft-oauth";
 import { AssignmentModel } from "@/models/Assignment";
 import { UserModel } from "@/models/User";
@@ -30,22 +38,41 @@ async function upsertMicrosoftCalendarEvent(params: {
   existingEventId?: string;
 }) {
   const due = params.dueAt;
-  const end = new Date(due.getTime() + 60 * 60 * 1000);
-  const payload = {
-    subject: params.title,
-    body: {
-      contentType: "text",
-      content: params.description || ""
-    },
-    start: {
-      dateTime: due.toISOString(),
-      timeZone: "UTC"
-    },
-    end: {
-      dateTime: end.toISOString(),
-      timeZone: "UTC"
-    }
-  };
+  const tz = getCalendarDefaultTimeZone();
+  const exact = formatExactDueForDescription(due, tz);
+  const allDay = isEndOfDayStyleDeadline(due, tz);
+  const description = allDay
+    ? withExactDuePreamble(params.description || "", exact)
+    : params.description || "";
+
+  const dateStr = formatDateOnlyInTimeZone(due, tz);
+  const payload = allDay
+    ? {
+        subject: params.title,
+        body: { contentType: "text" as const, content: description },
+        isAllDay: true,
+        start: {
+          dateTime: `${dateStr}T00:00:00`,
+          timeZone: tz
+        },
+        end: {
+          dateTime: `${addOneDayToYmd(dateStr)}T00:00:00`,
+          timeZone: tz
+        }
+      }
+    : {
+        subject: params.title,
+        body: { contentType: "text" as const, content: description },
+        isAllDay: false,
+        start: {
+          dateTime: due.toISOString(),
+          timeZone: "UTC"
+        },
+        end: {
+          dateTime: new Date(due.getTime() + 60 * 60 * 1000).toISOString(),
+          timeZone: "UTC"
+        }
+      };
 
   const method = params.existingEventId ? "PATCH" : "POST";
   const res = await fetch(
