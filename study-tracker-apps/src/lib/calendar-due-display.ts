@@ -4,10 +4,22 @@
  * readable in week view; the precise date/time is kept in the event description.
  */
 
+const FALLBACK_TZ = "America/New_York";
+
+function isValidIanaTimeZone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** IANA zone used to interpret due times when building calendar dates (set in env for your region). */
 export function getCalendarDefaultTimeZone(): string {
   const raw = process.env.CALENDAR_DEFAULT_TIMEZONE?.trim();
-  return raw && raw.length > 0 ? raw : "America/New_York";
+  const candidate = raw && raw.length > 0 ? raw : FALLBACK_TZ;
+  return isValidIanaTimeZone(candidate) ? candidate : FALLBACK_TZ;
 }
 
 export function getLocalHourMinute(d: Date, timeZone: string): { hour: number; minute: number } {
@@ -27,23 +39,31 @@ export function getLocalHourMinute(d: Date, timeZone: string): { hour: number; m
  * (typical Canvas / LMS "due 11:59 PM" behavior).
  */
 export function isEndOfDayStyleDeadline(d: Date, timeZone: string): boolean {
-  const { hour, minute } = getLocalHourMinute(d, timeZone);
-  return hour === 23 && minute >= 58;
+  try {
+    const { hour, minute } = getLocalHourMinute(d, timeZone);
+    return hour === 23 && minute >= 58;
+  } catch {
+    return false;
+  }
 }
 
 /** YYYY-MM-DD for the calendar date containing `d` in `timeZone`. */
 export function formatDateOnlyInTimeZone(d: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(d);
-  const y = parts.find((p) => p.type === "year")?.value;
-  const m = parts.find((p) => p.type === "month")?.value;
-  const day = parts.find((p) => p.type === "day")?.value;
-  if (!y || !m || !day) return d.toISOString().slice(0, 10);
-  return `${y}-${m}-${day}`;
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(d);
+    const y = parts.find((p) => p.type === "year")?.value;
+    const m = parts.find((p) => p.type === "month")?.value;
+    const day = parts.find((p) => p.type === "day")?.value;
+    if (!y || !m || !day) return d.toISOString().slice(0, 10);
+    return `${y}-${m}-${day}`;
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
 }
 
 /** Next calendar day after YYYY-MM-DD (Gregorian). */

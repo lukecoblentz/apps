@@ -299,7 +299,24 @@ export default function AssignmentsPage() {
       const synced = Number(payload?.synced || 0);
       const total = Number(payload?.total || 0);
       const failed = Number(payload?.failed || 0);
-      setActionMessage(`Google sync finished: ${synced}/${total} assignments synced${failed ? `, ${failed} failed` : ""}.`);
+      const failures = Array.isArray(payload?.failures) ? (payload.failures as string[]) : [];
+      const first = failures[0];
+      const firstDetail =
+        typeof first === "string" && first.includes(":")
+          ? first.slice(first.indexOf(":") + 1).trim()
+          : first;
+      if (failed > 0) {
+        setActionError(
+          firstDetail
+            ? firstDetail
+            : `${failed} assignment(s) could not be synced. Check Google connection in Settings.`
+        );
+      } else {
+        setActionError("");
+      }
+      setActionMessage(
+        `Google sync finished: ${synced}/${total} assignments synced${failed ? `, ${failed} failed` : ""}.`
+      );
       return;
     }
     setActionError(payload?.error || "Could not push all assignments to Google.");

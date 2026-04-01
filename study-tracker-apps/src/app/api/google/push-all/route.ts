@@ -15,7 +15,12 @@ export async function POST(req: NextRequest) {
   let successCount = 0;
   const failures: string[] = [];
 
-  for (const item of assignments as Array<{ _id: string }>) {
+  const rows = assignments as Array<{ _id: string }>;
+  for (let i = 0; i < rows.length; i++) {
+    const item = rows[i];
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, 80));
+    }
     try {
       await pushAssignmentToGoogle(userId, String(item._id), req.nextUrl.origin);
       successCount += 1;
