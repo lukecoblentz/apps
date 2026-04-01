@@ -1,18 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AssignmentTaskCard from "@/components/assignments/AssignmentTaskCard";
+import AssignmentsInsightsStrip from "@/components/assignments/AssignmentsInsightsStrip";
+import AssignmentsWeekStrip from "@/components/assignments/AssignmentsWeekStrip";
 import { inferPriorityFromTitle } from "@/lib/assignment-priority";
-import { formatDueShort, toDatetimeLocalValue } from "@/lib/assignments-datetime";
+import {
+  computeAssignmentCompletionStreak,
+  computeAssignmentInsights,
+  getBrowserTimeZone,
+  insightSummaryLines
+} from "@/lib/assignment-insights";
+import { fireTaskCompleteConfetti } from "@/lib/fire-confetti";
+import { toDatetimeLocalValue } from "@/lib/assignments-datetime";
 import { scrollFirstMarkDoneIntoView } from "@/lib/assignments-scroll";
 import {
   type AssignmentItem,
   type ClassItem,
   type Priority,
+  type SortMode,
+  type StatusFilter,
+  applyStatusFilter,
   filterAssignments,
+  getDueUrgency,
   mergeAssignmentFromApi,
   normalizeAssignmentStatus,
-  partitionAssignments
+  partitionForFilter,
+  sortAssignments
 } from "@/lib/assignments-list";
 
 export default function AssignmentsPage() {
@@ -35,6 +50,11 @@ export default function AssignmentsPage() {
   const [editPriority, setEditPriority] = useState<Priority>("normal");
   const [filterClassId, setFilterClassId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("deadline_asc");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set<string>());
+  const [bulkWorking, setBulkWorking] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [googleLoadingId, setGoogleLoadingId] = useState<string | null>(null);
@@ -44,9 +64,20 @@ export default function AssignmentsPage() {
   const [enteringDoneIds, setEnteringDoneIds] = useState(() => new Set<string>());
   const priorityTouchedRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
   const [canvasLastSyncAt, setCanvasLastSyncAt] = useState<string | null>(null);
   const [canvasSyncError, setCanvasSyncError] = useState("");
   const [hasCanvasConfigured, setHasCanvasConfigured] = useState(false);
+
+  const timeZone = useMemo(() => getBrowserTimeZone(), []);
+
+  const insightsBundle = useMemo(() => {
+    const tick = new Date();
+    const ins = computeAssignmentInsights(assignments, tick, timeZone);
+    const streak = computeAssignmentCompletionStreak(assignments, tick, timeZone);
+    const lines = insightSummaryLines(ins, streak);
+    return { ins, streak, lines };
+  }, [assignments, timeZone]);
 
   async function loadData() {
     const showSkeleton = !hasLoadedOnceRef.current;
@@ -85,7 +116,14 @@ export default function AssignmentsPage() {
         const raw = (await aRes.json()) as AssignmentItem[];
         setAssignments(
           Array.isArray(raw)
-            ? raw.map((a) => ({ ...a, status: normalizeAssignmentStatus(a.status) }))
+            ? raw.map((a) => ({
+                ...a,
+                status: normalizeAssignmentStatus(a.status),
+                updatedAt:
+                  typeof (a as { updatedAt?: unknown }).updatedAt === "string"
+                    ? (a as { updatedAt: string }).updatedAt
+                    : (a as { updatedAt?: string }).updatedAt
+              }))
             : []
         );
       }
@@ -108,15 +146,98 @@ export default function AssignmentsPage() {
     el?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
   }, [assignments]);
 
+  const nowMs = Date.now();
+
   const filteredAssignments = useMemo(
     () => filterAssignments(assignments, filterClassId, searchQuery),
     [assignments, filterClassId, searchQuery]
   );
 
-  const { overdue, upcoming, done } = useMemo(
-    () => partitionAssignments(filteredAssignments),
-    [filteredAssignments]
+  const statusFiltered = useMemo(
+    () => applyStatusFilter(filteredAssignments, statusFilter, nowMs),
+    [filteredAssignments, statusFilter, nowMs]
   );
+
+  const { overdue, upcoming, done } = useMemo(
+    () => partitionForFilter(statusFiltered, statusFilter),
+    [statusFiltered, statusFilter]
+  );
+
+  const overdueSorted = useMemo(() => sortAssignments(overdue, sortMode), [overdue, sortMode]);
+  const upcomingSorted = useMemo(
+    () => sortAssignments(upcoming, sortMode),
+    [upcoming, sortMode]
+  );
+  const doneSorted = useMemo(() => sortAssignments(done, sortMode), [done, sortMode]);
+
+  const scrollToNewAssignment = useCallback(() => {
+    document.getElementById("new-assignment")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+    window.setTimeout(() => titleInputRef.current?.focus(), 320);
+  }, []);
+
+  const toggleBulkSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearBulk = useCallback(() => {
+    setSelectedIds(new Set());
+    setBulkMode(false);
+  }, []);
+
+  const selectedTodoCount = useMemo(() => {
+    let n = 0;
+    for (const id of selectedIds) {
+      const a = assignments.find((x) => String(x._id) === id);
+      if (a && normalizeAssignmentStatus(a.status) === "todo") n += 1;
+    }
+    return n;
+  }, [assignments, selectedIds]);
+
+  async function bulkMarkDone() {
+    const ids = [...selectedIds].filter((id) => {
+      const a = assignments.find((x) => String(x._id) === id);
+      return a && normalizeAssignmentStatus(a.status) === "todo";
+    });
+    if (ids.length === 0) return;
+    setBulkWorking(true);
+    setActionError("");
+    const snapshot = assignments;
+    setAssignments((curr) =>
+      curr.map((x) =>
+        ids.includes(String(x._id)) ? { ...x, status: "done" as const } : x
+      )
+    );
+    const results = await Promise.all(
+      ids.map((id) =>
+        fetch(`/api/assignments/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "done" }),
+          cache: "no-store"
+        })
+      )
+    );
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length) {
+      setAssignments(snapshot);
+      setActionError("Some items could not be updated. Try again.");
+      setBulkWorking(false);
+      return;
+    }
+    fireTaskCompleteConfetti();
+    await loadData();
+    setSelectedIds(new Set());
+    setBulkMode(false);
+    setBulkWorking(false);
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -230,6 +351,7 @@ export default function AssignmentsPage() {
     );
 
     if (nextStatus === "done") {
+      fireTaskCompleteConfetti();
       setEnteringDoneIds((prev) => new Set(prev).add(itemKey));
       window.setTimeout(() => {
         setEnteringDoneIds((prev) => {
@@ -287,6 +409,11 @@ export default function AssignmentsPage() {
     const snapshot = assignments;
     const wasEditing = editingId === id;
     setAssignments((curr) => curr.filter((x) => x._id !== id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(String(id));
+      return next;
+    });
     if (wasEditing) setEditingId(null);
     const res = await fetch(`/api/assignments/${id}`, { method: "DELETE" });
     if (res.ok) {
@@ -404,181 +531,61 @@ export default function AssignmentsPage() {
     setActionError(payload?.error || "Could not push all assignments to Outlook.");
   }
 
-  function renderAssignmentRow(
+  function renderCard(
     a: AssignmentItem,
     opts: { overdue?: boolean; completed?: boolean }
   ) {
-    if (editingId === a._id) {
-      return (
-        <li
-          key={a._id}
-          id={`assignment-${a._id}`}
-          className="list-item"
-          style={{ flexWrap: "wrap" }}
-        >
-          <form
-            className="form-stack"
-            style={{ flex: 1, minWidth: 260 }}
-            onSubmit={saveEdit}
-          >
-            <input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              required
-            />
-            <select
-              value={editClassId}
-              onChange={(e) => setEditClassId(e.target.value)}
-              required
-            >
-              {classes.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label htmlFor="edit-priority">Priority</label>
-              <select
-                id="edit-priority"
-                value={editPriority}
-                onChange={(e) => setEditPriority(e.target.value as Priority)}
-              >
-                <option value="low">Low</option>
-                <option value="normal">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
-            <input
-              type="datetime-local"
-              value={editDue}
-              onChange={(e) => setEditDue(e.target.value)}
-              required
-            />
-            <textarea
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
-              placeholder="Notes"
-            />
-            <div className="row-actions">
-              <button type="submit" className="btn btn-primary btn-sm">
-                Save
-              </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={cancelEdit}>
-                Cancel
-              </button>
-            </div>
-          </form>
-        </li>
-      );
-    }
-
-    const isDone = normalizeAssignmentStatus(a.status) === "done";
-    const enterDone =
-      isDone && enteringDoneIds.has(String(a._id)) ? " assignment-row-enter-done" : "";
-    const completedClass = opts.completed ? " assignment-row-completed" : "";
-    const rowClass =
-      `list-item assignment-row${opts.overdue ? " list-item-overdue" : ""}${enterDone}${completedClass}`.trim();
-
+    const urgency = getDueUrgency(a, nowMs);
     return (
-      <li key={a._id} id={`assignment-${a._id}`} className={rowClass}>
-        <div className="list-item-main assignment-main" style={{ minWidth: 0 }}>
-          {a.classId?.color ? (
-            <span className="class-swatch" style={{ background: a.classId.color }} aria-hidden />
-          ) : (
-            <span className="class-swatch" style={{ background: "var(--text-faint)" }} aria-hidden />
-          )}
-          <div style={{ minWidth: 0 }}>
-            <div className="list-item-title-row">
-              <span className="list-item-title">{a.title}</span>
-              {a.priority === "high" ? (
-                <span className="badge badge-priority-high">High</span>
-              ) : null}
-              {a.priority === "low" ? (
-                <span className="badge badge-priority-low">Low</span>
-              ) : null}
-            </div>
-            <div className="list-item-meta assignment-meta-line">
-              <span>
-                {a.classId?.name ?? "Class"} · {formatDueShort(a.dueAt)}
-                {opts.overdue ? " · Overdue" : ""}
-              </span>
-              {a.source === "canvas" ? (
-                <span className="badge badge-canvas" title="Synced from Canvas">
-                  Canvas
-                </span>
-              ) : (
-                <span className="badge badge-manual" title="Created in Study Tracker">
-                  Manual
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="row-actions assignment-actions">
-          <span className={isDone ? "badge badge-done" : "badge badge-todo"}>
-            {isDone ? "Done" : "To do"}
-          </span>
-          {isDone ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => toggleStatus(a)}
-            >
-              Reopen
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => toggleStatus(a)}
-            >
-              Mark done
-            </button>
-          )}
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEdit(a)}>
-            Edit
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => pushGoogle(a._id)}
-            disabled={googleLoadingId === a._id}
-          >
-            {googleLoadingId === a._id
-              ? "Pushing..."
-              : a.googleEventId
-                ? "Update Google"
-                : "Push Google"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => pushMicrosoft(a._id)}
-            disabled={msLoadingId === a._id}
-          >
-            {msLoadingId === a._id
-              ? "Pushing..."
-              : a.msEventId
-                ? "Update Outlook"
-                : "Push Outlook"}
-          </button>
-          <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(a._id)}>
-            Delete
-          </button>
-        </div>
-      </li>
+      <AssignmentTaskCard
+        key={a._id}
+        assignment={a}
+        classes={classes}
+        urgency={urgency}
+        completed={opts.completed}
+        enteringDone={enteringDoneIds.has(String(a._id))}
+        editingId={editingId}
+        editTitle={editTitle}
+        editClassId={editClassId}
+        editDue={editDue}
+        editDescription={editDescription}
+        editPriority={editPriority}
+        onEditTitle={setEditTitle}
+        onEditClassId={setEditClassId}
+        onEditDue={setEditDue}
+        onEditDescription={setEditDescription}
+        onEditPriority={setEditPriority}
+        onSaveEdit={saveEdit}
+        onCancelEdit={cancelEdit}
+        onToggleStatus={toggleStatus}
+        onStartEdit={startEdit}
+        onDelete={onDelete}
+        onPushGoogle={pushGoogle}
+        onPushMicrosoft={pushMicrosoft}
+        googleLoadingId={googleLoadingId}
+        msLoadingId={msLoadingId}
+        bulkMode={bulkMode}
+        bulkSelected={selectedIds.has(String(a._id))}
+        onToggleBulkSelect={toggleBulkSelect}
+      />
     );
   }
 
   return (
     <>
-      <header className="page-header">
-        <h1>Assignments</h1>
-        <p>
-          Add tasks by class, set priority and due dates, then mark done or sync to Google /
-          Outlook (one-way from Study Tracker).
-        </p>
+      <header className="page-header assignments-page-header">
+        <div>
+          <h1>Assignments</h1>
+          <p>Stay on track with priorities, streaks, and a clear week view — then sync to Google or
+            Outlook when you need calendar backup.</p>
+          <p className="assignments-page-subnav muted">
+            <Link href="/analytics">Analytics</Link>
+            <span aria-hidden> · </span>
+            <Link href="/#focus-timer">Focus timer</Link>
+            <span aria-hidden> · </span>
+            <Link href="/calendar">Calendar</Link>
+          </p>
+        </div>
       </header>
 
       {hasCanvasConfigured ? (
@@ -600,6 +607,19 @@ export default function AssignmentsPage() {
         <p className="canvas-sync-error" role="status">
           Canvas: {canvasSyncError}
         </p>
+      ) : null}
+
+      {!dataLoading && assignments.length > 0 ? (
+        <div className="assignments-motivation-row">
+          <AssignmentsInsightsStrip
+            completionStreak={insightsBundle.streak}
+            todayPercent={insightsBundle.ins.todayProgress.percent}
+            todayTotal={insightsBundle.ins.todayProgress.total}
+            todayCompleted={insightsBundle.ins.todayProgress.completed}
+            insightLines={insightsBundle.lines}
+          />
+          <AssignmentsWeekStrip assignments={assignments} now={new Date()} />
+        </div>
       ) : null}
 
       {!dataLoading && (classes.length === 0 || assignments.length === 0) ? (
@@ -633,9 +653,9 @@ export default function AssignmentsPage() {
                   title (e.g. exam → high, lab → medium) until you change it.
                 </p>
                 {!assignments.length && classes.length ? (
-                  <a href="#new-assignment" className="btn btn-secondary btn-sm">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={scrollToNewAssignment}>
                     Jump to form
-                  </a>
+                  </button>
                 ) : null}
               </div>
             </li>
@@ -658,7 +678,7 @@ export default function AssignmentsPage() {
         </section>
       ) : null}
 
-      <div className="grid two">
+      <div className="grid two assignments-main-grid">
         <section className="card card-animate" id="new-assignment">
           <div className="card-header">
             <div>
@@ -669,17 +689,18 @@ export default function AssignmentsPage() {
           <form className="form-stack" onSubmit={onSubmit} noValidate>
             <div className="field">
               <label htmlFor="asgn-title">Title</label>
-            <input
-              id="asgn-title"
-              value={title}
-              onChange={(e) => {
-                const v = e.target.value;
-                setTitle(v);
-                if (!priorityTouchedRef.current) {
-                  setPriority(inferPriorityFromTitle(v));
-                }
-              }}
-              placeholder="Reading, problem set, exam…"
+              <input
+                id="asgn-title"
+                ref={titleInputRef}
+                value={title}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setTitle(v);
+                  if (!priorityTouchedRef.current) {
+                    setPriority(inferPriorityFromTitle(v));
+                  }
+                }}
+                placeholder="Reading, problem set, exam…"
                 required
                 minLength={1}
               />
@@ -791,8 +812,8 @@ export default function AssignmentsPage() {
             in Settings first. After you run a push, a success message appears here; &quot;Update&quot;
             refreshes the same event if the due time or title changed.
           </p>
-          <div className="assignments-toolbar">
-            <div className="field" style={{ marginBottom: 0, flex: "1 1 180px" }}>
+          <div className="assignments-toolbar assignments-toolbar-extended">
+            <div className="field" style={{ marginBottom: 0, flex: "1 1 160px" }}>
               <label htmlFor="asgn-search" className="sr-only">
                 Search assignments
               </label>
@@ -822,12 +843,52 @@ export default function AssignmentsPage() {
                 ))}
               </select>
             </div>
+            <div className="field" style={{ marginBottom: 0, flex: "0 1 200px" }}>
+              <label htmlFor="asgn-filter-status" className="sr-only">
+                Status
+              </label>
+              <select
+                id="asgn-filter-status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              >
+                <option value="all">All statuses</option>
+                <option value="todo">To do only</option>
+                <option value="done">Done only</option>
+                <option value="overdue">Overdue</option>
+                <option value="due_soon">Due soon (72h)</option>
+              </select>
+            </div>
+            <div className="field" style={{ marginBottom: 0, flex: "0 1 200px" }}>
+              <label htmlFor="asgn-sort" className="sr-only">
+                Sort
+              </label>
+              <select
+                id="asgn-sort"
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as SortMode)}
+              >
+                <option value="deadline_asc">Due soonest first</option>
+                <option value="deadline_desc">Due latest first</option>
+                <option value="priority_desc">Priority (high first)</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              className={`btn btn-secondary btn-sm${bulkMode ? " btn-active" : ""}`}
+              onClick={() => {
+                setBulkMode((v) => !v);
+                if (bulkMode) setSelectedIds(new Set());
+              }}
+            >
+              {bulkMode ? "Cancel select" : "Select"}
+            </button>
           </div>
           {actionMessage ? <p className="banner-success board-message">{actionMessage}</p> : null}
           {dataLoading ? (
             <ul className="skeleton-list" aria-hidden>
               {[0, 1, 2, 3].map((i) => (
-                <li key={i} className="skeleton-row">
+                <li key={i} className="skeleton-row assignment-card-skeleton">
                   <div className="skeleton-line skeleton-line-lg" />
                   <div className="skeleton-line skeleton-line-sm" />
                 </li>
@@ -836,14 +897,14 @@ export default function AssignmentsPage() {
           ) : assignments.length === 0 ? (
             <div className="empty-assignments">
               <div className="empty-assignments-icon" aria-hidden />
-              <p className="empty-hint" style={{ marginTop: 16, border: "none", background: "none" }}>
+              <p className="empty-hint empty-assignments-copy">
                 No assignments yet. Add one in the form — or create a class first if you haven&apos;t.
               </p>
             </div>
-          ) : filteredAssignments.length === 0 ? (
+          ) : assignments.length > 0 && statusFiltered.length === 0 ? (
             <div className="assignments-section-hint-wrap">
               <p className="assignments-section-hint" style={{ marginBottom: 12 }}>
-                No assignments match your search or class filter.
+                No assignments match your search, class, or status filter.
               </p>
               <button
                 type="button"
@@ -851,6 +912,7 @@ export default function AssignmentsPage() {
                 onClick={() => {
                   setFilterClassId("");
                   setSearchQuery("");
+                  setStatusFilter("all");
                 }}
               >
                 Clear filters
@@ -860,9 +922,9 @@ export default function AssignmentsPage() {
             <>
               <div className="assignments-section">
                 <h3 className="assignments-section-title">Overdue</h3>
-                {overdue.length ? (
-                  <ul className="list-plain assignments-list">
-                    {overdue.map((a) => renderAssignmentRow(a, { overdue: true }))}
+                {overdueSorted.length ? (
+                  <ul className="list-plain assignments-card-list">
+                    {overdueSorted.map((a) => renderCard(a, { overdue: true }))}
                   </ul>
                 ) : (
                   <p className="assignments-section-hint">No overdue assignments.</p>
@@ -871,9 +933,9 @@ export default function AssignmentsPage() {
 
               <div className="assignments-section">
                 <h3 className="assignments-section-title">Upcoming assignments</h3>
-                {upcoming.length ? (
-                  <ul className="list-plain assignments-list">
-                    {upcoming.map((a) => renderAssignmentRow(a, {}))}
+                {upcomingSorted.length ? (
+                  <ul className="list-plain assignments-card-list">
+                    {upcomingSorted.map((a) => renderCard(a, {}))}
                   </ul>
                 ) : (
                   <p className="assignments-section-hint">
@@ -884,9 +946,9 @@ export default function AssignmentsPage() {
 
               <div className="assignments-section">
                 <h3 className="assignments-section-title">Completed assignments</h3>
-                {done.length ? (
-                  <ul className="list-plain assignments-list assignments-list-done">
-                    {done.map((a) => renderAssignmentRow(a, { completed: true }))}
+                {doneSorted.length ? (
+                  <ul className="list-plain assignments-card-list assignments-list-done">
+                    {doneSorted.map((a) => renderCard(a, { completed: true }))}
                   </ul>
                 ) : (
                   <p className="assignments-section-hint">
@@ -898,6 +960,34 @@ export default function AssignmentsPage() {
           )}
         </section>
       </div>
+
+      {classes.length > 0 ? (
+        <button
+          type="button"
+          className="assignments-fab"
+          onClick={scrollToNewAssignment}
+          aria-label="Add assignment"
+        >
+          +
+        </button>
+      ) : null}
+
+      {bulkMode && selectedTodoCount > 0 ? (
+        <div className="assignments-bulk-bar" role="region" aria-label="Bulk actions">
+          <span className="assignments-bulk-count">{selectedTodoCount} selected</span>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={bulkWorking}
+            onClick={() => void bulkMarkDone()}
+          >
+            {bulkWorking ? "Marking…" : "Mark done"}
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={clearBulk}>
+            Clear
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }

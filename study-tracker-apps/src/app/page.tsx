@@ -198,7 +198,9 @@ export default function HomePage() {
 
       <div className="dashboard-layout">
         <div className="dashboard-col dashboard-col-main">
-          <StudyTimer subjects={subjects} onSessionLogged={refreshStudy} />
+          <section id="focus-timer" className="focus-timer-anchor">
+            <StudyTimer subjects={subjects} onSessionLogged={refreshStudy} />
+          </section>
 
           {goals ? (
             <section className="card card-animate goals-mini">

@@ -31,18 +31,23 @@
 - **Google Calendar:** OAuth; `calendar.events` + `calendar.readonly`; Settings dropdown + `GET /api/google/calendars`; push one / push all; optional `googleAutoSync`. **Event shape:** end-of-day deadlines (11:58–11:59 PM in `CALENDAR_DEFAULT_TIMEZONE`) sync as **all-day** events with `Exact deadline:` in description; others stay 1-hour timed. **`src/lib/calendar-due-display.ts`** + **`google-calendar.ts`**: PATCH failure → DELETE + POST recreate; `parseGoogleCalendarApiError`; invalid TZ falls back to `America/New_York`.
 - **Microsoft Outlook:** OAuth; `Calendars.ReadWrite`; optional `msCalendarId` + `GET /api/microsoft/calendars`; push one / push all; optional `msAutoSync`.
 - **UI / theming:** System + light + dark via `data-theme` on `<html>`, toggle `ThemeToggle`, `localStorage` key `study-tracker-theme`, `beforeInteractive` script in `layout.tsx`. **`StudyTrackerLogo`** SVG in nav.
-- **Routes:** `/calendar` — month grid of assignments by local due date; chips link to `/assignments#assignment-{id}`. **`/assignments`:** sections **Overdue** → **Upcoming** → **Completed**; search + class filter; setup checklist; sync explainer; skeleton on first load only (`hasLoadedOnceRef`); optimistic **Mark done** + merge PATCH; completed rows **strikethrough + muted** (`.assignment-row-completed`). **`/invite`** — personal invite link + **`GET /api/user/invite`**; register with `?invite=` sets `invitedByUserId`. Nav **Invite**; **`User`**: `inviteCode`, `invitedByUserId`.
+- **Nav (signed-in):** **Menu** button opens a **left drawer** (portal to `document.body`) with main app links — avoids crowding the top bar. **Do not** render `position: fixed` drawer/backdrop inside `<header class="nav">`: `backdrop-filter` on the header creates a containing block in Chromium so the drawer would only be ~nav-height tall. **`SettingsIconLink`** — gear icon in the header (same chrome as theme toggle) → `/settings`; **Settings** is not duplicated in the drawer list.
+- **Settings page:** Sticky **section pills** (Goals, Reminders, Canvas, Google, Outlook) with hash anchors `#settings-goals`, `#settings-reminders`, `#settings-canvas`, `#settings-google`, `#settings-outlook`; hash scroll on load; **← Dashboard** return link; `:target` / scroll-margin styles in `globals.css`.
+- **Routes:** `/calendar` — month grid of assignments by local due date; chips link to `/assignments#assignment-{id}`. **`/assignments`:** sections **Overdue** → **Upcoming** → **Completed**; search + class filter; setup checklist; sync explainer; skeleton on first load only (`hasLoadedOnceRef`); optimistic **Mark done** / **Reopen** + merge PATCH; **`normalizeAssignmentStatus`** in `assignments-list.ts` (load, partition, merge); compare IDs with **`String(x._id)`**; PATCH **`cache: 'no-store'`**; **Reopen** primary on completed rows; completed rows **strikethrough + muted** (`.assignment-row-completed`). **`/invite`** — personal invite link + **`GET /api/user/invite`**; register with `?invite=` sets `invitedByUserId`. Nav **Invite**; **`User`**: `inviteCode`, `invitedByUserId`.
 - **Dashboard (`/`):** **`useSession`** waits for `authenticated` before fetching; **`fetchDashboardWithRetry`** (4 attempts, backoff) + `credentials: 'same-origin'` for cold start / transient failures. **`/api/dashboard`:** `export const dynamic = 'force-dynamic'`; try/catch 500. **“Due this week”** = to-dos with `dueAt` after end of **today** through **end of upcoming Sunday 11:59:59 PM** in `CALENDAR_DEFAULT_TIMEZONE` (`endOfUpcomingSundayNight` in `calendar-due-display.ts`), not rolling 7 days.
 
 ## Recent Fixes (historical + ongoing)
+- **2026-03-31 — Nav + Settings + assignments UX:** Crowded top bar → **Menu** drawer (`AppNav.tsx`) + **gear** → Settings; drawer/backdrop **portaled to `document.body`** (fixes Chromium `backdrop-filter` clipping fixed drawer to header height). **Settings:** sticky section tabs + hash anchors + Dashboard link. **Assignments:** **Reopen** reliability — `normalizeAssignmentStatus`, `String(_id)` matching, PATCH `cache: 'no-store'`, clearer Zod error display, Reopen as primary on completed rows.
 - **2026-03-31 — Vercel Hobby deploy failure:** Canvas cron was `0 */4 * * *` (every 4h). **Hobby disallows multi-invocation-per-day crons** → deploys failed / wouldn’t redeploy. **Fixed:** `0 6 * * *` (daily 06:00 UTC) in `vercel.json`. See **Vercel Hobby: cron frequency limit (critical)** at top of this doc.
 - Assignment create duplicate key on `(userId, externalId)`: unique manual `externalId`, partial index on string `externalId`.
 - Class delete used to orphan assignments; now `AssignmentModel.deleteMany` then class delete.
 - Forgot-password 503 on local dev without Resend: dev path logs reset URL and returns 200 with instructions.
 
 ## Important Files
-- `src/app/layout.tsx` — nav, `ThemeToggle`, `StudyTrackerLogo`, theme init `Script`
-- `src/app/globals.css` — design tokens, dark mode, calendar/assignments/dashboard/skeleton/setup-checklist styles
+- `src/app/layout.tsx` — nav, `AppNav`, `SettingsIconLink`, `ThemeToggle`, `StudyTrackerLogo`, theme init `Script`
+- `src/components/AppNav.tsx` — Menu drawer + `createPortal(..., document.body)`; `NavLink` list (no Settings — use gear).
+- `src/components/SettingsIconLink.tsx` — gear link to `/settings` (matches `theme-toggle` styling).
+- `src/app/globals.css` — design tokens, dark mode, **`.nav-drawer` / `.nav-menu-btn`** (Menu), **`.settings-tabs`** / section anchors, calendar/assignments/dashboard/skeleton/setup-checklist styles
 - `src/components/ThemeToggle.tsx`, `src/components/StudyTrackerLogo.tsx`
 - `src/app/page.tsx` — dashboard (`useSession`, `fetchDashboardWithRetry`, tab labels)
 - `src/lib/fetch-dashboard.ts` — dashboard fetch with retries
@@ -337,3 +342,24 @@
 
 ### Next Task
 - None required for Hobby cron — optional: Pro-only sub-daily server schedule if product needs it.
+
+### Date
+- 2026-03-31
+
+### Done
+- **Nav:** Replaced inline horizontal nav links with **`AppNav`** — **Menu** opens a left **drawer** listing Dashboard, Analytics, Subjects, Classes, Assignments, Calendar, Invite (not Settings). **`createPortal`** renders backdrop + drawer to **`document.body`** so `position: fixed` is viewport-sized; rendering inside `<header class="nav">` broke full-height drawer because **`backdrop-filter`** on the header creates a containing block in Chromium (~64px tall strip, scrollable links only).
+- **Settings access:** **`SettingsIconLink`** — gear icon in header (`theme-toggle` styling), next to theme toggle when signed in; **`layout.tsx`** updated.
+- **Settings page:** Sticky **section pills** with hash links `#settings-goals`, `#settings-reminders`, `#settings-canvas`, `#settings-google`, `#settings-outlook`; **`useEffect`** scrolls to hash after load (respects `prefers-reduced-motion`); **← Dashboard** link; **`globals.css`:** `.settings-tabs`, `.settings-tab-pill`, `.settings-return-link`, `.settings-section[id]` scroll-margin, `.settings-section:target` highlight.
+- **Assignments — Reopen / Mark done:** Added **`normalizeAssignmentStatus`** in **`src/lib/assignments-list.ts`**; apply on **GET** load mapping, **`partitionAssignments`**, **`mergeAssignmentFromApi`**. **Toggle** uses normalized current status → `done` ↔ `todo` (avoids bad `status === "todo"` branch when status missing). **Optimistic update + merge** use **`String(x._id) === String(item._id)`**; fetch URL **`encodeURIComponent`**. PATCH fetch **`cache: 'no-store'`**. **Error display** for Zod **`formErrors`**. **UI:** **Reopen** uses **`btn-primary`** (same as Mark done). **`enteringDoneIds`** uses string ids.
+
+### Current Status
+- Top bar: logo + Menu + gear + theme + email + Sign out. Settings: quick tabs + hashes. Assignments: reopen should persist in UI state and match server after PATCH.
+
+### Env / Deploy Notes
+- None.
+
+### Known Issues
+- Same repo-wide backlog (UTC cron, etc.).
+
+### Next Task
+- Optional: dashboard rows link to `/assignments#assignment-{id}` for one-click jump to reopen.
