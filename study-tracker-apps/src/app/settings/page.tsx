@@ -1,7 +1,16 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+
+const SETTINGS_SECTIONS: { id: string; label: string }[] = [
+  { id: "settings-goals", label: "Goals" },
+  { id: "settings-reminders", label: "Reminders" },
+  { id: "settings-canvas", label: "Canvas" },
+  { id: "settings-google", label: "Google" },
+  { id: "settings-outlook", label: "Outlook" }
+];
 
 const REMINDER_PRESETS: { label: string; minutes: number }[] = [
   { label: "1 day before", minutes: 1440 },
@@ -159,6 +168,21 @@ export default function SettingsPage() {
       );
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (loading) return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) return;
+    requestAnimationFrame(() => {
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document.getElementById(hash)?.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "start"
+      });
+    });
+  }, [loading]);
 
   function toggleReminder(m: number) {
     setReminderSet((prev) => {
@@ -388,16 +412,27 @@ export default function SettingsPage() {
 
   return (
     <>
-      <header className="page-header">
+      <header className="page-header settings-page-header">
+        <Link href="/" className="settings-return-link">
+          ← Dashboard
+        </Link>
         <h1>Settings</h1>
         <p>Connect Canvas, tune reminders, and prepare calendar export.</p>
       </header>
+
+      <nav className="settings-tabs" aria-label="Jump to section">
+        {SETTINGS_SECTIONS.map(({ id, label }) => (
+          <a key={id} href={`#${id}`} className="settings-tab-pill">
+            {label}
+          </a>
+        ))}
+      </nav>
 
       <div className="grid">
         {message ? <p className="banner-success">{message}</p> : null}
         {error ? <p className="alert-error">{error}</p> : null}
 
-        <section className="card settings-section">
+        <section id="settings-goals" className="card settings-section">
           <h2>Study goals</h2>
           <p className="card-subtitle">
             Used for progress rings on the dashboard and analytics. Adjust anytime.
@@ -431,7 +466,7 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="card settings-section">
+        <section id="settings-reminders" className="card settings-section">
           <h2>Reminders</h2>
           <p className="card-subtitle" style={{ marginBottom: 0 }}>
             Email reminders use these offsets before each due date (Resend +
@@ -456,7 +491,7 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="card settings-section">
+        <section id="settings-canvas" className="card settings-section">
           <h2>Canvas LMS</h2>
           <p className="card-subtitle">
             Use your institution base URL (e.g.{" "}
@@ -543,7 +578,7 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="card settings-section">
+        <section id="settings-google" className="card settings-section">
           <h2>Google Calendar</h2>
           <p className="card-subtitle">
             Connect your Google account with OAuth, pick which calendar receives new
@@ -628,7 +663,7 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="card settings-section">
+        <section id="settings-outlook" className="card settings-section">
           <h2>Microsoft Outlook Calendar</h2>
           <p className="card-subtitle">
             Connect your Microsoft account with OAuth, pick which calendar receives new

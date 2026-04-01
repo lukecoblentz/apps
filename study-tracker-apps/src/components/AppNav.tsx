@@ -11,7 +11,6 @@ const LINKS = [
   { href: "/classes", label: "Classes" },
   { href: "/assignments", label: "Assignments" },
   { href: "/calendar", label: "Calendar" },
-  { href: "/settings", label: "Settings" },
   { href: "/invite", label: "Invite" }
 ] as const;
 

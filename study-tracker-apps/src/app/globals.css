@@ -1243,8 +1243,63 @@ input[type="color"] {
   margin-bottom: 28px;
 }
 
+.settings-section[id] {
+  scroll-margin-top: calc(var(--nav-height) + 56px);
+}
+
+.settings-section:target {
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--tab-active-border);
+}
+
 .settings-section h2 {
   margin-bottom: 6px;
+}
+
+.settings-page-header .settings-return-link {
+  display: inline-block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-bottom: 10px;
+}
+
+.settings-page-header .settings-return-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  position: sticky;
+  top: var(--nav-height);
+  z-index: 40;
+  margin: -12px 0 22px;
+  padding: 10px 0 14px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-tab-pill {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  text-decoration: none;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.settings-tab-pill:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
 }
 
 .checkbox-row {

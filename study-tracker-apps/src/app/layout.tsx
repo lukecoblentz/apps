@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import AuthProvider from "@/components/AuthProvider";
 import AuthStatus from "@/components/AuthStatus";
 import AppNav from "@/components/AppNav";
+import SettingsIconLink from "@/components/SettingsIconLink";
 import SignOutButton from "@/components/SignOutButton";
 import StudyTrackerLogo from "@/components/StudyTrackerLogo";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -67,6 +68,7 @@ export default async function RootLayout({
                 </Link>
                 {session?.user ? <AppNav /> : null}
                 <div className="nav-aside">
+                  {session?.user ? <SettingsIconLink /> : null}
                   <ThemeToggle />
                   <AuthStatus />
                   {!session?.user ? (
